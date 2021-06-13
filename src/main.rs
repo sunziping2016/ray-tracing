@@ -1,13 +1,13 @@
 use async_channel::Sender;
 use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
 use itertools::iproduct;
-use nalgebra::{SimdBool, SimdRealField, SimdValue, Vector3};
+use nalgebra::{Scalar, SimdRealField, SimdValue, Vector3};
 use num_traits::Zero;
-use num_traits::{cast, clamp, NumCast};
+use num_traits::{cast, clamp};
 use rand::thread_rng;
 use ray_tracing::camera::{Camera, CameraParam};
 use ray_tracing::image::ImageParam;
-use ray_tracing::simd_f32::SimdF32Field;
+use ray_tracing::simd::{MyFromElement, MyFromSlice};
 use serde::{Deserialize, Serialize};
 use simba::simd::f32x16;
 use std::fmt::Debug;
@@ -93,7 +93,7 @@ pub struct Render<R> {
 impl<R> Render<R> {
     pub fn new(scene: SceneParam<R>) -> Self
     where
-        R: SimdRealField,
+        R: SimdValue + Zero + Scalar + Copy,
     {
         let num_pixels = scene.image.height() * scene.image.width();
         let num_soa = (num_pixels + R::lanes() - 1) / R::lanes();
@@ -102,13 +102,12 @@ impl<R> Render<R> {
         Self {
             scene,
             camera: Camera::new(camera_param, default_aspect_ratio),
-            screen: RwLock::new((vec![Zero::zero(); num_soa], 0)),
+            screen: RwLock::new((vec![Vector3::from([R::zero(); 3]); num_soa], 0)),
         }
     }
     pub fn run(&self)
     where
-        R: SimdF32Field,
-        <R as SimdValue>::Element: Copy + PartialEq + Debug,
+        R: SimdRealField<Element = f32> + MyFromSlice + MyFromElement,
     {
         let mut rng = thread_rng();
         let result = self
@@ -118,15 +117,10 @@ impl<R> Render<R> {
             .into_iter()
             .map(|(pos, mask)| {
                 (
-                    mask.if_else(
-                        || {
-                            Vector3::new(
-                                R::from_subset(&0.1) + R::from_subset(&0.8) * pos[0],
-                                R::from_subset(&0.9) - R::from_subset(&0.5) * pos[1],
-                                R::from_subset(&1.0),
-                            )
-                        },
-                        Zero::zero,
+                    Vector3::new(
+                        R::from_element(0.1) + R::from_element(0.8) * pos[0],
+                        R::from_element(0.9) - R::from_element(0.5) * pos[1],
+                        R::from_element(1.0),
                     ),
                     mask,
                 )
@@ -136,24 +130,22 @@ impl<R> Render<R> {
         lock.0
             .iter_mut()
             .zip(result.iter().copied())
-            .for_each(|(sum, (v, mask))| {
-                *sum += mask.if_else(|| v, Zero::zero);
+            .for_each(|(sum, (v, _mask))| {
+                *sum += v;
             });
         lock.1 += 1;
-        println!("Iter {}", lock.1);
-        drop(lock)
+        println!("Iter {}", lock.1)
     }
     pub fn get(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
     where
-        R: SimdRealField,
-        <R as SimdValue>::Element: Copy + PartialOrd + NumCast,
+        R: SimdRealField<Element = f32> + MyFromElement,
     {
         let lock = self.screen.read().unwrap();
         let new_last = lock.1;
         if new_last <= last {
             return None;
         }
-        let scale = R::from_subset(&(256.0 / lock.1 as f64));
+        let scale = R::from_element(256.0 / lock.1 as f32);
         let colors = lock.0.iter().map(|x| x.scale(scale)).collect::<Vec<_>>();
         drop(lock);
         let height = self.scene.image.height();
@@ -205,7 +197,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (render_tx, render_rx) = mpsc::channel();
 
     let aspect_ratio = state.scene.image.width() as f32 / state.scene.image.height() as f32;
-    let app = App::new(msg_tx.clone(), 400, 225, aspect_ratio);
+    let app = App::new(msg_tx.clone(), 800, 600, aspect_ratio);
     // Processes all application events received from signals
     {
         let state = state.clone();
@@ -238,7 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         )
                                         .as_ref(),
                                 );
-                                // app.image.set_size_request(0, 0);
+                                app.image.set_size_request(0, 0);
                             }
                         }
                     }
@@ -249,7 +241,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     .scale_simple(width, height, gdk_pixbuf::InterpType::Nearest)
                                     .as_ref(),
                             );
-                            // app.image.set_size_request(0, 0);
+                            app.image.set_size_request(0, 0);
+                            println!("redraw");
                             pixbuf = Some(new_pixbuf);
                             last = new_last;
                         }
