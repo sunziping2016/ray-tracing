@@ -57,8 +57,8 @@ impl<F> Camera<F> {
         let focus_dist = param
             .focus_dist
             .unwrap_or_else(|| (param.look_from - param.look_at).norm());
-        let horizontal = u.scale(focus_dist * viewport_height);
-        let vertical = v.scale(focus_dist * viewport_width);
+        let horizontal = u.scale(focus_dist * viewport_width);
+        let vertical = v.scale(focus_dist * viewport_height);
         let lower_left_corner =
             param.look_from - horizontal.unscale(2.0) - vertical.unscale(2.0) - w.scale(focus_dist);
 

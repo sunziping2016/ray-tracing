@@ -103,18 +103,19 @@ impl<F> Render<F> {
     {
         let num_pixels = scene.image.height() * scene.image.width();
         let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
-        let default_aspect_ratio = scene.image.width() as f32 / scene.image.height() as f32;
+        let default_aspect_ratio = scene.image.aspect_ratio();
         let camera_param = scene.camera.clone();
         let mut rng = thread_rng();
         let bvh = BVH::build(
             &(0..NUM)
                 .map(|_| {
+                    let size = Vector3::new(36f32, 36f32, 36f32);
                     let min = Vector3::new(
-                        rng.gen_range(-100.0f32..620.0f32),
-                        rng.gen_range(-100.0f32..620.0f32),
-                        rng.gen_range(-100.0f32..620.0f32),
-                    );
-                    let max = min + Vector3::new(36f32, 36f32, 36f32);
+                        rng.gen_range(-300.0f32..300.0f32),
+                        rng.gen_range(-300.0f32..300.0f32),
+                        rng.gen_range(-300.0f32..300.0f32),
+                    ) - size.unscale(2.0f32);
+                    let max = min + size;
                     AABB::with_bounds(min, max)
                 })
                 .collect::<Vec<_>>(),
