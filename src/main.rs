@@ -1,19 +1,24 @@
+#![allow(incomplete_features)]
+#![feature(const_generics)]
+#![feature(const_evaluatable_checked)]
+#![feature(array_map)]
+
 use async_channel::Sender;
 use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
 use itertools::iproduct;
-use nalgebra::{Scalar, SimdRealField, SimdValue, Vector3};
-use num_traits::Zero;
+use nalgebra::{SimdRealField, SimdValue, Vector3};
 use num_traits::{cast, clamp};
-use rand::thread_rng;
+use rand::{thread_rng, Rng};
+use ray_tracing::bvh::aabb::AABB;
+use ray_tracing::bvh::bvh::BVH;
 use ray_tracing::camera::{Camera, CameraParam};
 use ray_tracing::image::ImageParam;
-use ray_tracing::simd::{MyFromElement, MyFromSlice};
+use ray_tracing::simd::{MyFromElement, MyFromSlice, MySimdVector};
 use serde::{Deserialize, Serialize};
-use simba::simd::f32x16;
+use simba::simd::f32x8;
 use std::fmt::Debug;
 use std::fs::File;
 use std::future::Future;
-use std::marker::PhantomData;
 use std::process;
 use std::sync::{mpsc, Arc, RwLock};
 
@@ -76,60 +81,89 @@ impl App {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SceneParam<R> {
+pub struct SceneParam {
     image: ImageParam,
     camera: CameraParam,
-    #[serde(skip_serializing, default)]
-    phantom: PhantomData<R>,
 }
 
 #[derive(Debug)]
 pub struct Render<F> {
-    scene: SceneParam<F>,
-    camera: Camera,
+    scene: SceneParam,
+    camera: Camera<F>,
+    bvh: BVH,
     screen: RwLock<(Vec<Vector3<F>>, usize)>,
 }
 
+const NUM: usize = 200;
+
 impl<F> Render<F> {
-    pub fn new(scene: SceneParam<F>) -> Self
+    pub fn new(scene: SceneParam) -> Self
     where
-        F: SimdValue + Zero + Scalar + Copy,
+        F: SimdRealField<Element = f32> + MyFromElement,
     {
         let num_pixels = scene.image.height() * scene.image.width();
         let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
         let default_aspect_ratio = scene.image.width() as f32 / scene.image.height() as f32;
         let camera_param = scene.camera.clone();
+        let mut rng = thread_rng();
+        let bvh = BVH::build(
+            &(0..NUM)
+                .map(|_| {
+                    let min = Vector3::new(
+                        rng.gen_range(-100.0f32..620.0f32),
+                        rng.gen_range(-100.0f32..620.0f32),
+                        rng.gen_range(-100.0f32..620.0f32),
+                    );
+                    let max = min + Vector3::new(36f32, 36f32, 36f32);
+                    AABB::with_bounds(min, max)
+                })
+                .collect::<Vec<_>>(),
+        );
         Self {
             scene,
             camera: Camera::new(camera_param, default_aspect_ratio),
             screen: RwLock::new((vec![Vector3::from([F::zero(); 3]); num_soa], 0)),
+            bvh,
         }
     }
     pub fn run(&self)
     where
-        F: SimdRealField<Element = f32> + MyFromSlice + MyFromElement,
+        F: SimdRealField<Element = f32>
+            + MyFromSlice
+            + MyFromElement
+            + MySimdVector
+            + From<[f32; F::LANES]>,
     {
         let mut rng = thread_rng();
-        let result = self
+        let rays = self
             .scene
             .image
             .sample::<F, _>(&mut rng)
             .into_iter()
-            .map(|(pos, mask)| {
-                (
-                    Vector3::new(
-                        F::from_element(0.1) + F::from_element(0.8) * pos[0],
-                        F::from_element(0.9) - F::from_element(0.5) * pos[1],
-                        F::from_element(1.0),
-                    ),
-                    mask,
-                )
+            .map(|(st, mask)| self.camera.get_ray(st, mask, &mut rng))
+            .collect::<Vec<_>>();
+        let colors = rays
+            .iter()
+            .map(|ray| {
+                let hits =
+                    self.bvh
+                        .traverse(&ray, F::from_element(0f32), F::from_element(f32::INFINITY));
+                let first_hit = hits.map(|hit| {
+                    hit.into_iter()
+                        .next()
+                        .map(|index| index as f32 / (NUM - 1) as f32)
+                });
+                let r = F::from(first_hit.map(|rel| rel.map_or(1.0, |_| 0.7)));
+                let g = F::from(first_hit.map(|rel| rel.map_or(1.0, |x| 0.9 - 0.5 * x)));
+                let b = F::from(first_hit.map(|rel| rel.map_or(1.0, |x| 0.4 + 0.5 * x)));
+                (Vector3::new(r, g, b), ray.mask())
             })
             .collect::<Vec<_>>();
+
         let mut lock = self.screen.write().unwrap();
         lock.0
             .iter_mut()
-            .zip(result.iter().copied())
+            .zip(colors.into_iter())
             .for_each(|(sum, (v, _mask))| {
                 *sum += v;
             });
@@ -155,7 +189,7 @@ impl<F> Render<F> {
         let max: <F as SimdValue>::Element = cast(255.5).unwrap();
         iproduct!(0..height, 0..width).for_each(|(y, x)| {
             let index = y * width + x;
-            let (index1, index2) = (index / f32x16::lanes(), index % f32x16::lanes());
+            let (index1, index2) = (index / f32x8::lanes(), index % f32x8::lanes());
             let base = index * 3;
             bytes[base] = cast(clamp(colors[index1][0].extract(index2), min, max)).unwrap();
             bytes[base + 1] = cast(clamp(colors[index1][1].extract(index2), min, max)).unwrap();
@@ -190,7 +224,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         process::exit(1);
     }
 
-    let state: Arc<Render<f32x16>> = Arc::new(Render::new(serde_json::from_reader(File::open(
+    let state: Arc<Render<f32x8>> = Arc::new(Render::new(serde_json::from_reader(File::open(
         "data/scene.json",
     )?)?));
     let (msg_tx, msg_rx) = async_channel::bounded(16);
@@ -203,10 +237,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let state = state.clone();
         glib::MainContext::default().spawn_local(async move {
             let mut pixbuf: Option<gdk_pixbuf::Pixbuf> = None;
-            // let num_pixels = config.image.height() * config.image.width();
-            // let zeros: Vector3<f32x16> = Zero::zero();
-            // let num_soa = (num_pixels + f32x16::lanes() - 1) / f32x16::lanes();
-            // let mut sum: Vec<Vector3<f32x16>> = vec![zeros; num_soa];
             let mut width = i32::MAX;
             let mut height = i32::MAX;
             let mut last = 0;
@@ -272,7 +302,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Trigger drawing
     {
-        let _ = glib::source::timeout_add(1000 / 60, move || {
+        let _ = glib::source::timeout_add(1000 / 30, move || {
             let tx = msg_tx.clone();
             spawn(async move {
                 let _ = tx.send(Event::RedrawTimeout).await;

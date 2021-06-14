@@ -17,7 +17,7 @@ enum BVHVariants {
 }
 
 #[derive(Debug, Clone)]
-pub struct BVHNode {
+struct BVHNode {
     parent_index: usize,
     depth: u32,
     variant: BVHVariants,
@@ -153,9 +153,11 @@ impl BVHNode {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BVH {
-    pub nodes: Vec<BVHNode>,
-    pub node_indices: Vec<usize>,
+    nodes: Vec<BVHNode>,
+    #[allow(dead_code)] // FIXME
+    node_indices: Vec<usize>,
 }
 
 impl BVH {
@@ -212,8 +214,8 @@ impl BVH {
                             );
                         }
                     };
+                    build(0);
                     build(1);
-                    build(2);
                 }
                 BVHVariants::Leaf { shape_index, .. } => {
                     let bits = mask.bitmask();
