@@ -210,12 +210,3 @@ impl_my_mask!(
     m128x1 m128x2 m128x4
     msizex2 msizex4 msizex8
 );
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use nalgebra::Field;
-
-    #[allow(dead_code)]
-    fn zero_mask<R: Field>() {}
-}

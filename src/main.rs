@@ -84,43 +84,43 @@ pub struct SceneParam<R> {
 }
 
 #[derive(Debug)]
-pub struct Render<R> {
-    scene: SceneParam<R>,
+pub struct Render<F> {
+    scene: SceneParam<F>,
     camera: Camera,
-    screen: RwLock<(Vec<Vector3<R>>, usize)>,
+    screen: RwLock<(Vec<Vector3<F>>, usize)>,
 }
 
-impl<R> Render<R> {
-    pub fn new(scene: SceneParam<R>) -> Self
+impl<F> Render<F> {
+    pub fn new(scene: SceneParam<F>) -> Self
     where
-        R: SimdValue + Zero + Scalar + Copy,
+        F: SimdValue + Zero + Scalar + Copy,
     {
         let num_pixels = scene.image.height() * scene.image.width();
-        let num_soa = (num_pixels + R::lanes() - 1) / R::lanes();
+        let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
         let default_aspect_ratio = scene.image.width() as f32 / scene.image.height() as f32;
         let camera_param = scene.camera.clone();
         Self {
             scene,
             camera: Camera::new(camera_param, default_aspect_ratio),
-            screen: RwLock::new((vec![Vector3::from([R::zero(); 3]); num_soa], 0)),
+            screen: RwLock::new((vec![Vector3::from([F::zero(); 3]); num_soa], 0)),
         }
     }
     pub fn run(&self)
     where
-        R: SimdRealField<Element = f32> + MyFromSlice + MyFromElement,
+        F: SimdRealField<Element = f32> + MyFromSlice + MyFromElement,
     {
         let mut rng = thread_rng();
         let result = self
             .scene
             .image
-            .sample::<R, _>(&mut rng)
+            .sample::<F, _>(&mut rng)
             .into_iter()
             .map(|(pos, mask)| {
                 (
                     Vector3::new(
-                        R::from_element(0.1) + R::from_element(0.8) * pos[0],
-                        R::from_element(0.9) - R::from_element(0.5) * pos[1],
-                        R::from_element(1.0),
+                        F::from_element(0.1) + F::from_element(0.8) * pos[0],
+                        F::from_element(0.9) - F::from_element(0.5) * pos[1],
+                        F::from_element(1.0),
                     ),
                     mask,
                 )
@@ -138,21 +138,21 @@ impl<R> Render<R> {
     }
     pub fn get(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
     where
-        R: SimdRealField<Element = f32> + MyFromElement,
+        F: SimdRealField<Element = f32> + MyFromElement,
     {
         let lock = self.screen.read().unwrap();
         let new_last = lock.1;
         if new_last <= last {
             return None;
         }
-        let scale = R::from_element(256.0 / lock.1 as f32);
+        let scale = F::from_element(256.0 / lock.1 as f32);
         let colors = lock.0.iter().map(|x| x.scale(scale)).collect::<Vec<_>>();
         drop(lock);
         let height = self.scene.image.height();
         let width = self.scene.image.width();
         let mut bytes: Vec<u8> = vec![255; height * width * 3];
-        let min: <R as SimdValue>::Element = cast(0.5).unwrap();
-        let max: <R as SimdValue>::Element = cast(255.5).unwrap();
+        let min: <F as SimdValue>::Element = cast(0.5).unwrap();
+        let max: <F as SimdValue>::Element = cast(255.5).unwrap();
         iproduct!(0..height, 0..width).for_each(|(y, x)| {
             let index = y * width + x;
             let (index1, index2) = (index / f32x16::lanes(), index % f32x16::lanes());

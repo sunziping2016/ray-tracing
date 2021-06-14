@@ -845,6 +845,7 @@ dependencies = [
  "nalgebra",
  "num-traits",
  "num_cpus",
+ "packed_simd_2",
  "rand",
  "rayon",
  "serde",

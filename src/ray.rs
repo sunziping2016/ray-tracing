@@ -1,15 +1,17 @@
-use nalgebra::{RealField, SimdValue, UnitVector3, Vector3};
+use crate::bvh::aabb::AABB;
+use crate::simd::MyFromElement;
+use nalgebra::{RealField, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector3};
 
 #[derive(Debug, Clone)]
-pub struct Ray<R: SimdValue> {
-    origin: Vector3<R>,
-    direction: UnitVector3<R>,
-    time: R,
-    mask: R::SimdBool,
+pub struct Ray<F: SimdValue> {
+    origin: Vector3<F>,
+    direction: UnitVector3<F>,
+    time: F,
+    mask: F::SimdBool,
 }
 
-impl<R: SimdValue> Ray<R> {
-    pub fn new(origin: Vector3<R>, direction: UnitVector3<R>, time: R, mask: R::SimdBool) -> Self {
+impl<F: SimdValue> Ray<F> {
+    pub fn new(origin: Vector3<F>, direction: UnitVector3<F>, time: F, mask: F::SimdBool) -> Self {
         Ray {
             origin,
             direction,
@@ -17,10 +19,43 @@ impl<R: SimdValue> Ray<R> {
             mask,
         }
     }
-    pub fn at(&self, t: R) -> Vector3<R>
+
+    pub fn at(&self, t: F) -> Vector3<F>
     where
-        R: RealField,
+        F: RealField,
     {
         self.origin + self.direction.scale(t)
+    }
+    pub fn mask(&self) -> F::SimdBool {
+        self.mask
+    }
+}
+
+impl<F: SimdValue<Element = f32>> Ray<F> {
+    pub fn intersects_aabb(&self, aabb: &AABB, mut t_min: F, mut t_max: F) -> F::SimdBool
+    where
+        F: SimdRealField + MyFromElement,
+    {
+        let mut update_and_test = |min: f32, max: f32, origin: F, direction: F| -> F::SimdBool {
+            let min_val = (F::from_element(min) - origin) / direction;
+            let max_val = (F::from_element(max) - origin) / direction;
+            t_min = min_val.simd_min(max_val).simd_max(t_min);
+            t_max = min_val.simd_max(max_val).simd_min(t_max);
+            t_min.simd_lt(t_max)
+        };
+        let mut mask = self.mask;
+        if mask.none() {
+            return mask;
+        }
+        mask = mask & update_and_test(aabb.min[0], aabb.max[0], self.origin[0], self.direction[0]);
+        if mask.none() {
+            return mask;
+        }
+        mask = mask & update_and_test(aabb.min[1], aabb.max[1], self.origin[1], self.direction[1]);
+        if mask.none() {
+            return mask;
+        }
+        mask = mask & update_and_test(aabb.min[2], aabb.max[2], self.origin[2], self.direction[2]);
+        mask
     }
 }

@@ -24,10 +24,10 @@ impl ImageParam {
     pub fn aspect_ratio(&self) -> f32 {
         self.width as f32 / self.height as f32
     }
-    pub fn sample<S: SimdRealField<Element = f32> + MyFromSlice, R: Rng>(
+    pub fn sample<F: SimdRealField<Element = f32> + MyFromSlice, R: Rng>(
         &self,
         rng: &mut R,
-    ) -> Vec<(Vector2<S>, S::SimdBool)> {
+    ) -> Vec<(Vector2<F>, F::SimdBool)> {
         let width = self.width as f32;
         let height = self.height as f32;
         let (ys, xs): (Vec<_>, Vec<_>) = iproduct!(0..self.height, 0..self.width)
@@ -37,13 +37,13 @@ impl ImageParam {
                     rng.gen_range(((j as f32 - 0.5) / height)..((j as f32 + 0.5) / height)),
                 )
             })
-            .chain(iter::repeat((f32::NAN, f32::NAN)).take(S::lanes() - 1))
+            .chain(iter::repeat((f32::NAN, f32::NAN)).take(F::lanes() - 1))
             .unzip();
-        xs.chunks_exact(S::lanes())
-            .map(|chunk| S::from_slice(chunk))
+        xs.chunks_exact(F::lanes())
+            .map(|chunk| F::from_slice(chunk))
             .zip(
-                ys.chunks_exact(S::lanes())
-                    .map(|chunk| S::from_slice(chunk)),
+                ys.chunks_exact(F::lanes())
+                    .map(|chunk| F::from_slice(chunk)),
             )
             .map(|(x, y)| (Vector2::new(x, y), x.simd_eq(x)))
             .collect()
