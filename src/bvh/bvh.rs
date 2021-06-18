@@ -1,6 +1,6 @@
 use crate::bvh::aabb::AABB;
 use crate::ray::Ray;
-use crate::simd::{MyFromElement, MySimdVector};
+use crate::simd::MySimdVector;
 use crate::EPSILON;
 use nalgebra::{SimdBool, SimdRealField, SimdValue, Vector3};
 use std::fmt::Debug;
@@ -183,10 +183,10 @@ impl BVH {
     #[allow(clippy::uninit_assumed_init)]
     pub fn traverse<F: SimdValue>(&self, ray: &Ray<F>, t_min: F, t_max: F) -> [Vec<usize>; F::LANES]
     where
-        F: SimdRealField<Element = f32> + MyFromElement + MySimdVector,
+        F: SimdRealField<Element = f32> + MySimdVector,
         [Vec<usize>; F::LANES]: Sized,
     {
-        fn traverse_recursive<F: SimdRealField<Element = f32> + MyFromElement + MySimdVector>(
+        fn traverse_recursive<F: SimdRealField<Element = f32> + MySimdVector>(
             nodes: &[BVHNode],
             node_index: usize,
             ray: &Ray<F>,

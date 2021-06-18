@@ -9,11 +9,12 @@ use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector3};
 use num_traits::{cast, clamp};
 use rand::{thread_rng, Rng};
-use ray_tracing::bvh::aabb::AABB;
 use ray_tracing::bvh::bvh::BVH;
 use ray_tracing::camera::{Camera, CameraParam};
+use ray_tracing::hittable::sphere::Sphere;
+use ray_tracing::hittable::{Bounded, Hittable};
 use ray_tracing::image::ImageParam;
-use ray_tracing::simd::{MyFromElement, MyFromSlice, MySimdVector};
+use ray_tracing::simd::{MyFromSlice, MySimdVector};
 use serde::{Deserialize, Serialize};
 use simba::simd::f32x8;
 use std::fmt::Debug;
@@ -90,6 +91,7 @@ pub struct SceneParam {
 pub struct Render<F> {
     scene: SceneParam,
     camera: Camera<F>,
+    spheres: Vec<Sphere>,
     bvh: BVH,
     screen: RwLock<(Vec<Vector3<F>>, usize)>,
 }
@@ -99,41 +101,43 @@ const NUM: usize = 200;
 impl<F> Render<F> {
     pub fn new(scene: SceneParam) -> Self
     where
-        F: SimdRealField<Element = f32> + MyFromElement,
+        F: SimdRealField<Element = f32>,
     {
         let num_pixels = scene.image.height() * scene.image.width();
         let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
         let default_aspect_ratio = scene.image.aspect_ratio();
         let camera_param = scene.camera.clone();
         let mut rng = thread_rng();
+        let spheres = (0..NUM)
+            .map(|_| {
+                Sphere::new(
+                    Vector3::new(
+                        rng.gen_range(-300.0f32..300.0f32),
+                        rng.gen_range(-300.0f32..300.0f32),
+                        rng.gen_range(-300.0f32..300.0f32),
+                    ),
+                    18.0f32,
+                )
+            })
+            .collect::<Vec<_>>();
         let bvh = BVH::build(
-            &(0..NUM)
-                .map(|_| {
-                    let size = Vector3::new(36f32, 36f32, 36f32);
-                    let min = Vector3::new(
-                        rng.gen_range(-300.0f32..300.0f32),
-                        rng.gen_range(-300.0f32..300.0f32),
-                        rng.gen_range(-300.0f32..300.0f32),
-                    ) - size.unscale(2.0f32);
-                    let max = min + size;
-                    AABB::with_bounds(min, max)
-                })
+            &spheres
+                .iter()
+                .map(|x| x.bounding_box(0.0f32, 0.0f32))
                 .collect::<Vec<_>>(),
         );
         Self {
             scene,
             camera: Camera::new(camera_param, default_aspect_ratio),
             screen: RwLock::new((vec![Vector3::from([F::zero(); 3]); num_soa], 0)),
+            spheres,
             bvh,
         }
     }
     pub fn run(&self)
     where
-        F: SimdRealField<Element = f32>
-            + MyFromSlice
-            + MyFromElement
-            + MySimdVector
-            + From<[f32; F::LANES]>,
+        F: SimdRealField<Element = f32> + MyFromSlice + MySimdVector + From<[f32; F::LANES]>,
+        F::SimdBool: SimdValue<Element = bool>,
     {
         let mut rng = thread_rng();
         let rays = self
@@ -146,17 +150,43 @@ impl<F> Render<F> {
         let colors = rays
             .iter()
             .map(|ray| {
-                let hits =
-                    self.bvh
-                        .traverse(&ray, F::from_element(0f32), F::from_element(f32::INFINITY));
-                let first_hit = hits.map(|hit| {
-                    hit.into_iter()
-                        .next()
-                        .map(|index| index as f32 / (NUM - 1) as f32)
-                });
-                let r = F::from(first_hit.map(|rel| rel.map_or(1.0, |_| 0.7)));
-                let g = F::from(first_hit.map(|rel| rel.map_or(1.0, |x| 0.9 - 0.5 * x)));
-                let b = F::from(first_hit.map(|rel| rel.map_or(1.0, |x| 0.4 + 0.5 * x)));
+                let hits = self
+                    .bvh
+                    .traverse(&ray, F::splat(0f32), F::splat(f32::INFINITY));
+                let first_hit = hits
+                    .iter()
+                    .enumerate()
+                    .map(|(ray_index, hit)| {
+                        hit.iter()
+                            .copied()
+                            .next()
+                            .filter(|&index| {
+                                self.spheres[index]
+                                    .hit(ray, F::zero(), F::splat(f32::INFINITY))
+                                    .mask
+                                    .extract(ray_index)
+                            })
+                            .map(|index| index as f32 / (NUM - 1) as f32)
+                    })
+                    .collect::<Vec<_>>();
+                let r = F::from_slice(
+                    &first_hit
+                        .iter()
+                        .map(|rel| rel.map_or(1.0, |_| 0.7))
+                        .collect::<Vec<_>>(),
+                );
+                let g = F::from_slice(
+                    &first_hit
+                        .iter()
+                        .map(|rel| rel.map_or(1.0, |x| 0.9 - 0.5 * x))
+                        .collect::<Vec<_>>(),
+                );
+                let b = F::from_slice(
+                    &first_hit
+                        .iter()
+                        .map(|rel| rel.map_or(1.0, |x| 0.4 + 0.5 * x))
+                        .collect::<Vec<_>>(),
+                );
                 (Vector3::new(r, g, b), ray.mask())
             })
             .collect::<Vec<_>>();
@@ -173,14 +203,14 @@ impl<F> Render<F> {
     }
     pub fn get(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
     where
-        F: SimdRealField<Element = f32> + MyFromElement,
+        F: SimdRealField<Element = f32>,
     {
         let lock = self.screen.read().unwrap();
         let new_last = lock.1;
         if new_last <= last {
             return None;
         }
-        let scale = F::from_element(256.0 / lock.1 as f32);
+        let scale = F::splat(256.0 / lock.1 as f32);
         let colors = lock.0.iter().map(|x| x.scale(scale)).collect::<Vec<_>>();
         drop(lock);
         let height = self.scene.image.height();
@@ -192,9 +222,8 @@ impl<F> Render<F> {
             let index = y * width + x;
             let (index1, index2) = (index / f32x8::lanes(), index % f32x8::lanes());
             let base = index * 3;
-            bytes[base] = cast(clamp(colors[index1][0].extract(index2), min, max)).unwrap();
-            bytes[base + 1] = cast(clamp(colors[index1][1].extract(index2), min, max)).unwrap();
-            bytes[base + 2] = cast(clamp(colors[index1][2].extract(index2), min, max)).unwrap();
+            let color = colors[index1].map(|x| cast(clamp(x.extract(index2), min, max)).unwrap());
+            (0..2).for_each(|index| bytes[base + index] = color[index]);
         });
         Some((
             gdk_pixbuf::Pixbuf::from_bytes(
@@ -257,7 +286,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         .scale_simple(
                                             width,
                                             height,
-                                            gdk_pixbuf::InterpType::Nearest,
+                                            gdk_pixbuf::InterpType::Bilinear,
                                         )
                                         .as_ref(),
                                 );
@@ -269,7 +298,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Some((new_pixbuf, new_last)) = state.get(last) {
                             app.image.set_from_pixbuf(
                                 new_pixbuf
-                                    .scale_simple(width, height, gdk_pixbuf::InterpType::Nearest)
+                                    .scale_simple(width, height, gdk_pixbuf::InterpType::Bilinear)
                                     .as_ref(),
                             );
                             app.image.set_size_request(0, 0);

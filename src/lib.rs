@@ -4,6 +4,7 @@
 
 pub mod bvh;
 pub mod camera;
+pub mod hittable;
 pub mod image;
 pub mod random;
 pub mod ray;

@@ -44,21 +44,6 @@ impl_from_slice!(
     usizex2 usizex4 usizex8
 );
 
-pub trait MyFromElement: SimdValue {
-    fn from_element(element: Self::Element) -> Self;
-}
-
-impl<T> MyFromElement for Simd<T>
-where
-    T: SimdVector + From<[Self::Element; T::LANES]>,
-    Self: SimdValue,
-    Self::Element: Copy,
-{
-    fn from_element(element: Self::Element) -> Self {
-        Simd([element; T::LANES].into())
-    }
-}
-
 macro_rules! impl_by_lane {
     ($tr:path { $($n:literal => $ty:ident),+ }) => {
         $(
@@ -150,8 +135,7 @@ macro_rules! impl_mask_by_lane {
                 type Type: SimdBool
                     + Display
                     + PrimitiveSimdValue
-                    + MySimdVector
-                    + MyMask;
+                    + MySimdVector;
             }
             impl_by_lane!($tr { $($n => $ty),+ } );
         )+
@@ -181,32 +165,3 @@ impl<T: SimdVector> MySimdVector for Simd<T> {
     type LanesType = T::LanesType;
     const LANES: usize = T::LANES;
 }
-
-pub trait MyMask {
-    fn zeros() -> Self;
-    fn ones() -> Self;
-}
-
-macro_rules! impl_my_mask {
-    ($($ty:ident)+) => {
-        $(
-            impl MyMask for Simd<packed_simd_2::$ty> {
-                fn zeros() -> Self {
-                    Simd(packed_simd_2::$ty::default())
-                }
-                fn ones() -> Self {
-                    Simd(!packed_simd_2::$ty::default())
-                }
-            }
-        )*
-    };
-}
-
-impl_my_mask!(
-    m8x2 m8x4 m8x8 m8x16 m8x32 m8x64
-    m16x2 m16x4 m16x8 m16x16 m16x32
-    m32x2 m32x4 m32x8 m32x16
-    m64x2 m64x4 m64x8
-    m128x1 m128x2 m128x4
-    msizex2 msizex4 msizex8
-);
