@@ -31,7 +31,9 @@ where
 {
     fn value(&self, direction: &UnitVector3<F>) -> F {
         let cosine = direction.as_ref().dot(&self.dir);
-        cosine.is_simd_positive().if_else(|| cosine, F::zero)
+        cosine
+            .is_simd_positive()
+            .if_else(|| cosine * F::simd_frac_1_pi(), F::zero)
     }
     fn generate<R: Rng>(&self, rng: &mut R) -> UnitVector3<F> {
         let r1 = random_uniform(0f32..1f32, rng);

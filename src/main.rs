@@ -9,7 +9,8 @@ use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector3};
 use num_traits::{cast, clamp, Zero};
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, Rng, SeedableRng};
+use rand_pcg::Pcg64;
 use ray_tracing::bvh::bvh::BVH;
 use ray_tracing::camera::{Camera, CameraParam};
 use ray_tracing::hittable::sphere::Sphere;
@@ -122,7 +123,7 @@ where
         let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
         let default_aspect_ratio = scene.image.aspect_ratio();
         let camera_param = scene.camera.clone();
-        let mut rng = thread_rng();
+        let mut rng = Pcg64::seed_from_u64(0);
         let (mut hittables, mut materials): (Vec<_>, Vec<_>) = (0..NUM)
             .map(|shape_index| {
                 let x = shape_index as f32 / (NUM - 1) as f32;

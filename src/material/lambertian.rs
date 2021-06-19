@@ -54,7 +54,7 @@ impl<T: Texture> Material for Lambertian<T> {
     {
         let cosine = hit_record.normal.dot(scattered.direction());
         cosine
-            .is_simd_negative()
-            .if_else(|| F::zero(), || cosine / F::simd_pi())
+            .is_simd_positive()
+            .if_else(|| cosine * F::simd_frac_1_pi(), F::zero)
     }
 }
