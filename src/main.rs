@@ -7,16 +7,19 @@ use async_channel::Sender;
 use core::array;
 use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
 use itertools::iproduct;
-use nalgebra::{SimdRealField, SimdValue, Vector3};
-use num_traits::{cast, clamp};
+use nalgebra::{SimdBool, SimdRealField, SimdValue, Vector3};
+use num_traits::{cast, clamp, Zero};
 use rand::{thread_rng, Rng};
 use ray_tracing::bvh::bvh::BVH;
 use ray_tracing::camera::{Camera, CameraParam};
 use ray_tracing::hittable::sphere::Sphere;
-use ray_tracing::hittable::{Bounded, HitRecord, Hittable};
+use ray_tracing::hittable::{HitRecord, Hittable};
 use ray_tracing::image::ImageParam;
+use ray_tracing::material::lambertian::Lambertian;
 use ray_tracing::ray::Ray;
-use ray_tracing::simd::{MyFromSlice, MySimdVector};
+use ray_tracing::simd::MyFromSlice;
+use ray_tracing::texture::solid_color::SolidColor;
+use ray_tracing::{SimdBoolField, SimdF32Field};
 use serde::{Deserialize, Serialize};
 use simba::simd::f32x8;
 use std::fmt::Debug;
@@ -90,40 +93,54 @@ pub struct SceneParam {
 }
 
 #[derive(Debug)]
-pub struct Render<F> {
+pub struct Render<F>
+where
+    F: SimdF32Field,
+    F::SimdBool: SimdBoolField<F>,
+{
     scene: SceneParam,
     camera: Camera<F>,
-    spheres: Vec<Sphere>,
+    hittables: Vec<Sphere>,
+    materials: Vec<Lambertian<SolidColor>>,
     bvh: BVH,
     screen: RwLock<(Vec<Vector3<F>>, usize)>,
+    background: Vector3<f32>,
 }
 
 const NUM: usize = 200;
 
-impl<F> Render<F> {
-    pub fn new(scene: SceneParam) -> Self
-    where
-        F: SimdRealField<Element = f32>,
-    {
+impl<F> Render<F>
+where
+    F: SimdF32Field,
+    F::SimdBool: SimdBoolField<F>,
+{
+    pub fn new(scene: SceneParam) -> Self {
         let num_pixels = scene.image.height() * scene.image.width();
         let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
         let default_aspect_ratio = scene.image.aspect_ratio();
         let camera_param = scene.camera.clone();
         let mut rng = thread_rng();
-        let spheres = (0..NUM)
-            .map(|_| {
-                Sphere::new(
-                    Vector3::new(
-                        rng.gen_range(-300.0f32..300.0f32),
-                        rng.gen_range(-300.0f32..300.0f32),
-                        rng.gen_range(-300.0f32..300.0f32),
+        let (mut hittables, mut materials): (Vec<_>, Vec<_>) = (0..NUM)
+            .map(|shape_index| {
+                let x = shape_index as f32 / (NUM - 1) as f32;
+                let color = Vector3::new(0.55, 0.9 - 0.7 * x, 0.2 + 0.7 * x);
+                (
+                    Sphere::new(
+                        Vector3::new(
+                            rng.gen_range(-300f32..300f32),
+                            rng.gen_range(-300f32..300f32),
+                            rng.gen_range(-300f32..300f32),
+                        ),
+                        18.0f32,
                     ),
-                    18.0f32,
+                    Lambertian::new(SolidColor::new(color)),
                 )
             })
-            .collect::<Vec<_>>();
+            .unzip();
+        hittables.push(Sphere::new(Vector3::new(0f32, -3318f32, 0f32), 3018f32));
+        materials.push(Lambertian::new(SolidColor::new(Zero::zero())));
         let bvh = BVH::build(
-            &spheres
+            &hittables
                 .iter()
                 .map(|x| x.bounding_box(0.0f32, 0.0f32))
                 .collect::<Vec<_>>(),
@@ -131,26 +148,22 @@ impl<F> Render<F> {
         Self {
             scene,
             camera: Camera::new(camera_param, default_aspect_ratio),
-            screen: RwLock::new((vec![Vector3::from([F::zero(); 3]); num_soa], 0)),
-            spheres,
+            screen: RwLock::new((vec![Zero::zero(); num_soa], 0)),
+            hittables,
+            materials,
             bvh,
+            background: Vector3::new(1.0f32, 1.0f32, 1.0f32),
         }
     }
-    pub fn run(&self)
+    pub fn ray_color(&self, rays: Vec<Ray<F>>, depth: u64) -> Vec<Vector3<F>>
     where
-        F: SimdRealField<Element = f32> + MyFromSlice + MySimdVector + From<[f32; F::LANES]>,
-        F::SimdBool: SimdValue<Element = bool, SimdBool = F::SimdBool> + Debug,
+        [(); F::LANES]: Sized,
     {
-        let mut rng = thread_rng();
-        let rays = self
-            .scene
-            .image
-            .sample::<F, _>(&mut rng)
-            .into_iter()
-            .map(|(st, mask)| self.camera.get_ray(st, mask, &mut rng))
-            .collect::<Vec<_>>();
+        if depth == 0 {
+            return vec![Zero::zero(); rays.len()];
+        }
         let mut hit_shapes: Vec<(Vec<usize>, Vec<Ray<F>>)> =
-            vec![(Vec::new(), Vec::new()); self.spheres.len()];
+            vec![(Vec::new(), Vec::new()); self.hittables.len()];
         rays.iter().enumerate().for_each(|(index1, ray)| {
             array::IntoIter::new(
                 self.bvh
@@ -177,33 +190,52 @@ impl<F> Render<F> {
                 });
             });
         });
-        let mut hit_records = vec![HitRecord::<F>::default(); rays.len()];
-        let mut colors = vec![Vector3::from_element(F::splat(1.0f32)); rays.len()];
+        // (shape_index, hit_record)
+        let mut hit_records =
+            vec![(usize::MAX, HitRecord::<f32>::default()); rays.len() * F::LANES];
+        let mut hit_record_indices = Vec::new();
         hit_shapes
             .into_iter()
             .enumerate()
             .for_each(|(shape_index, (ray_indices, rays))| {
-                let shape = &self.spheres[shape_index];
-                let x = shape_index as f32 / (NUM - 1) as f32;
-                let color = Vector3::new(0.55, 0.9 - 0.7 * x, 0.2 + 0.7 * x);
+                let shape = &self.hittables[shape_index];
                 rays.into_iter().enumerate().for_each(|(index1, ray)| {
                     let hit_record = shape.hit(&ray, F::zero(), F::splat(f32::INFINITY));
-                    (0..F::LANES).for_each(|index2| {
-                        if hit_record.mask.extract(index2) {
-                            let ray_index = ray_indices[index1 * F::LANES + index2];
-                            let ray_index1 = ray_index / F::LANES;
-                            let ray_index2 = ray_index % F::LANES;
-                            if hit_records[ray_index1].t.extract(ray_index2)
-                                > hit_record.t.extract(index2)
-                            {
-                                hit_records[ray_index1]
-                                    .replace(ray_index2, hit_record.extract(index2));
-                                colors[ray_index1].replace(ray_index2, color);
+                    if hit_record.mask.any() {
+                        (0..F::LANES).for_each(|index2| {
+                            if hit_record.mask.extract(index2) {
+                                let ray_index = ray_indices[index1 * F::LANES + index2];
+                                let record = &mut hit_records[ray_index];
+                                if record.1.t > hit_record.t.extract(index2) {
+                                    if !record.1.mask {
+                                        hit_record_indices.push(ray_index);
+                                    }
+                                    record.0 = shape_index;
+                                    record.1 = hit_record.extract(index2);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 });
             });
+        println!("{}", hit_record_indices.len());
+        let colors = vec![Vector3::splat(self.background); rays.len()];
+        colors
+    }
+    pub fn run(&self)
+    where
+        F: MyFromSlice,
+        [(); F::LANES]: Sized,
+    {
+        let mut rng = thread_rng();
+        let rays = self
+            .scene
+            .image
+            .sample::<F, _>(&mut rng)
+            .into_iter()
+            .map(|(st, mask)| self.camera.get_ray(st, mask, &mut rng))
+            .collect::<Vec<_>>();
+        let colors = self.ray_color(rays, 20);
         let mut lock = self.screen.write().unwrap();
         lock.0
             .iter_mut()
@@ -299,7 +331,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         .scale_simple(
                                             width,
                                             height,
-                                            gdk_pixbuf::InterpType::Bilinear,
+                                            gdk_pixbuf::InterpType::Nearest,
                                         )
                                         .as_ref(),
                                 );
@@ -311,7 +343,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Some((new_pixbuf, new_last)) = state.get(last) {
                             app.image.set_from_pixbuf(
                                 new_pixbuf
-                                    .scale_simple(width, height, gdk_pixbuf::InterpType::Bilinear)
+                                    .scale_simple(width, height, gdk_pixbuf::InterpType::Nearest)
                                     .as_ref(),
                             );
                             app.image.set_size_request(0, 0);

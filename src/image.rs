@@ -30,7 +30,7 @@ impl ImageParam {
     ) -> Vec<(Vector2<F>, F::SimdBool)> {
         let width = self.width as f32;
         let height = self.height as f32;
-        let (xs, ys): (Vec<_>, Vec<_>) = iproduct!(0..self.height, 0..self.width)
+        let (xs, ys): (Vec<_>, Vec<_>) = iproduct!((0..self.height).rev(), (0..self.width).rev())
             .map(|(j, i)| {
                 (
                     rng.gen_range(((i as f32 - 0.5) / width)..((i as f32 + 0.5) / width)),

@@ -6,19 +6,19 @@ use std::f32::consts;
 
 pub fn random_uniform<F, S, R: Rng>(range: S, rng: &mut R) -> F
 where
-    F: SimdRealField<Element = f32> + MySimdVector + From<[f32; F::LANES]>,
+    F: SimdRealField<Element = f32> + MySimdVector,
     S: SampleRange<f32> + Clone,
 {
-    let mut indices = [0f32; F::LANES];
-    for index in indices.iter_mut() {
-        *index = rng.gen_range(range.clone());
+    let mut value = F::zero();
+    for index in 0..F::LANES {
+        value.replace(index, rng.gen_range(range.clone()));
     }
-    indices.into()
+    value
 }
 
 pub fn random_in_unit_disk<F, R: Rng>(rng: &mut R) -> Vector2<F>
 where
-    F: SimdRealField<Element = f32> + MySimdVector + From<[f32; F::LANES]>,
+    F: SimdRealField<Element = f32> + MySimdVector,
 {
     let r = random_uniform::<F, _, _>(0f32..=1f32, rng).simd_sqrt();
     let theta = random_uniform::<F, _, _>(0f32..(2.0f32 * consts::PI), rng);
@@ -27,7 +27,7 @@ where
 
 pub fn random_to_sphere<F, R: Rng>(rng: &mut R, radius: F, distance_squared: F) -> Vector3<F>
 where
-    F: SimdRealField<Element = f32> + MySimdVector + From<[f32; F::LANES]>,
+    F: SimdRealField<Element = f32> + MySimdVector,
 {
     let r1 = random_uniform::<F, _, _>(0f32..=1f32, rng);
     let r2 = random_uniform::<F, _, _>(0f32..=1f32, rng);

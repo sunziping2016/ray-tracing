@@ -1,42 +1,42 @@
 use crate::bvh::aabb::AABB;
-use crate::hittable::{Bounded, HitRecord, Hittable};
+use crate::hittable::{HitRecord, Hittable};
 use crate::random::random_to_sphere;
 use crate::ray::Ray;
-use crate::simd::MySimdVector;
-use nalgebra::{Rotation3, SimdBool, SimdRealField, SimdValue, Vector2, Vector3};
+use crate::{SimdBoolField, SimdF32Field};
+use nalgebra::{Rotation3, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3};
 use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct Sphere {
     center: Vector3<f32>,
     radius: f32,
-    // TODO: material
 }
 
 impl Sphere {
     pub fn new(center: Vector3<f32>, radius: f32) -> Self {
         Sphere { center, radius }
     }
-    pub fn sphere_uv<F: SimdRealField>(p: Vector3<F>) -> (F, F) {
+    pub fn sphere_uv<F>(p: &Vector3<F>) -> (F, F)
+    where
+        F: SimdRealField,
+    {
         let theta = -p[1].simd_acos();
         let phi = (-p[2]).simd_atan2(p[1]) + F::simd_pi();
         (phi / F::simd_two_pi(), theta * F::simd_frac_1_pi())
     }
 }
 
-impl Bounded for Sphere {
+impl Hittable for Sphere {
     fn bounding_box(&self, _time0: f32, _time1: f32) -> AABB {
         let radius = Vector3::from_element(self.radius);
         AABB::with_bounds(self.center - radius, self.center + radius)
     }
-}
-
-impl<F> Hittable<F> for Sphere
-where
-    F: SimdRealField<Element = f32> + MySimdVector + From<[f32; F::LANES]>,
-    F::SimdBool: SimdValue<Element = bool>,
-{
-    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
+    #[allow(clippy::many_single_char_names)]
+    fn hit<F>(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F>
+    where
+        F: SimdF32Field,
+        F::SimdBool: SimdBoolField<F>,
+    {
         let center = Vector3::splat(self.center);
         let oc: Vector3<F> = ray.origin() - center;
         let half_b = oc.dot(ray.direction());
@@ -57,10 +57,9 @@ where
         }
         let t = mask1.if_else(|| root1, || root2);
         let p = ray.at(t);
-        let outward_normal = (p - center).unscale(F::splat(self.radius));
-        let (front_face, normal) =
-            HitRecord::face_normal(ray.direction().into_inner(), outward_normal);
-        let (u, v) = Self::sphere_uv(outward_normal);
+        let outward_normal = UnitVector3::new_normalize(p - center);
+        let (front_face, normal) = HitRecord::face_normal(ray.direction(), outward_normal);
+        let (u, v) = Self::sphere_uv(outward_normal.as_ref());
         HitRecord {
             p,
             normal,
@@ -70,8 +69,11 @@ where
             mask,
         }
     }
-
-    fn pdf_value(&self, origin: &Vector3<F>, _direction: &Vector3<F>) -> F {
+    fn pdf_value<F>(&self, origin: &Vector3<F>, _direction: &Vector3<F>) -> F
+    where
+        F: SimdF32Field,
+        F::SimdBool: SimdBoolField<F>,
+    {
         let cos_theta_max = (F::one()
             - F::splat(self.radius * self.radius)
                 / (Vector3::splat(self.center) - origin).norm_squared())
@@ -79,8 +81,11 @@ where
         let solid_angle = F::simd_two_pi() * (F::one() - cos_theta_max);
         solid_angle.simd_recip()
     }
-
-    fn random<R: Rng>(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
+    fn random<F, R: Rng>(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F>
+    where
+        F: SimdF32Field,
+        F::SimdBool: SimdBoolField<F>,
+    {
         let direction = Vector3::splat(self.center) - origin;
         let selector = direction.normalize()[0].simd_abs().simd_gt(F::splat(0.9));
         let up = Vector3::new(

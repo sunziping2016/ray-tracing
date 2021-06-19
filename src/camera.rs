@@ -79,7 +79,7 @@ impl<F> Camera<F> {
     }
     pub fn get_ray<R: Rng>(&self, st: Vector2<F>, mask: F::SimdBool, rng: &mut R) -> Ray<F>
     where
-        F: SimdRealField<Element = f32> + MySimdVector + From<[f32; F::LANES]>,
+        F: SimdRealField<Element = f32> + MySimdVector,
     {
         let rd = random_in_unit_disk::<F, _>(rng).scale(self.lens_radius);
         let offset = self.u.scale(rd[0]) + self.v.scale(rd[1]);
