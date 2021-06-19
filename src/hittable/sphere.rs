@@ -26,7 +26,7 @@ impl Sphere {
 
 impl Bounded for Sphere {
     fn bounding_box(&self, _time0: f32, _time1: f32) -> AABB {
-        let radius = Vector3::new(self.radius, self.radius, self.radius);
+        let radius = Vector3::from_element(self.radius);
         AABB::with_bounds(self.center - radius, self.center + radius)
     }
 }
@@ -37,7 +37,7 @@ where
     F::SimdBool: SimdValue<Element = bool>,
 {
     fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
-        let center = self.center.map(F::splat);
+        let center = Vector3::splat(self.center);
         let oc: Vector3<F> = ray.origin() - center;
         let half_b = oc.dot(ray.direction());
         let c = oc.norm_squared() - F::splat(self.radius * self.radius);
@@ -74,14 +74,14 @@ where
     fn pdf_value(&self, origin: &Vector3<F>, _direction: &Vector3<F>) -> F {
         let cos_theta_max = (F::one()
             - F::splat(self.radius * self.radius)
-                / (self.center.map(F::splat) - origin).norm_squared())
+                / (Vector3::splat(self.center) - origin).norm_squared())
         .simd_sqrt();
         let solid_angle = F::simd_two_pi() * (F::one() - cos_theta_max);
         solid_angle.simd_recip()
     }
 
     fn random<R: Rng>(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
-        let direction = self.center.map(F::splat) - origin;
+        let direction = Vector3::splat(self.center) - origin;
         let selector = direction.normalize()[0].simd_abs().simd_gt(F::splat(0.9));
         let up = Vector3::new(
             selector.if_else(F::zero, F::one),

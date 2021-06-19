@@ -12,8 +12,8 @@ impl AABB {
     }
     pub fn empty() -> Self {
         Self {
-            min: Vector3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
-            max: Vector3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
+            min: Vector3::from_element(f32::INFINITY),
+            max: Vector3::from_element(f32::NEG_INFINITY),
         }
     }
     pub fn is_empty(&self) -> bool {

@@ -4,6 +4,7 @@
 #![feature(array_map)]
 
 use async_channel::Sender;
+use core::array;
 use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector3};
@@ -12,8 +13,9 @@ use rand::{thread_rng, Rng};
 use ray_tracing::bvh::bvh::BVH;
 use ray_tracing::camera::{Camera, CameraParam};
 use ray_tracing::hittable::sphere::Sphere;
-use ray_tracing::hittable::{Bounded, Hittable};
+use ray_tracing::hittable::{Bounded, HitRecord, Hittable};
 use ray_tracing::image::ImageParam;
+use ray_tracing::ray::Ray;
 use ray_tracing::simd::{MyFromSlice, MySimdVector};
 use serde::{Deserialize, Serialize};
 use simba::simd::f32x8;
@@ -137,7 +139,7 @@ impl<F> Render<F> {
     pub fn run(&self)
     where
         F: SimdRealField<Element = f32> + MyFromSlice + MySimdVector + From<[f32; F::LANES]>,
-        F::SimdBool: SimdValue<Element = bool>,
+        F::SimdBool: SimdValue<Element = bool, SimdBool = F::SimdBool> + Debug,
     {
         let mut rng = thread_rng();
         let rays = self
@@ -147,55 +149,66 @@ impl<F> Render<F> {
             .into_iter()
             .map(|(st, mask)| self.camera.get_ray(st, mask, &mut rng))
             .collect::<Vec<_>>();
-        let colors = rays
-            .iter()
-            .map(|ray| {
-                let hits = self
-                    .bvh
-                    .traverse(&ray, F::splat(0f32), F::splat(f32::INFINITY));
-                let first_hit = hits
-                    .iter()
-                    .enumerate()
-                    .map(|(ray_index, hit)| {
-                        hit.iter()
-                            .copied()
-                            .next()
-                            .filter(|&index| {
-                                self.spheres[index]
-                                    .hit(ray, F::zero(), F::splat(f32::INFINITY))
-                                    .mask
-                                    .extract(ray_index)
-                            })
-                            .map(|index| index as f32 / (NUM - 1) as f32)
-                    })
-                    .collect::<Vec<_>>();
-                let r = F::from_slice(
-                    &first_hit
-                        .iter()
-                        .map(|rel| rel.map_or(1.0, |_| 0.7))
-                        .collect::<Vec<_>>(),
-                );
-                let g = F::from_slice(
-                    &first_hit
-                        .iter()
-                        .map(|rel| rel.map_or(1.0, |x| 0.9 - 0.5 * x))
-                        .collect::<Vec<_>>(),
-                );
-                let b = F::from_slice(
-                    &first_hit
-                        .iter()
-                        .map(|rel| rel.map_or(1.0, |x| 0.4 + 0.5 * x))
-                        .collect::<Vec<_>>(),
-                );
-                (Vector3::new(r, g, b), ray.mask())
-            })
-            .collect::<Vec<_>>();
-
+        let mut hit_shapes: Vec<(Vec<usize>, Vec<Ray<F>>)> =
+            vec![(Vec::new(), Vec::new()); self.spheres.len()];
+        rays.iter().enumerate().for_each(|(index1, ray)| {
+            array::IntoIter::new(
+                self.bvh
+                    .traverse(ray, F::splat(0f32), F::splat(f32::INFINITY)),
+            )
+            .enumerate()
+            .filter(move |(index2, indices)| ray.mask().extract(*index2) && !indices.is_empty())
+            .for_each(|(index2, indices)| {
+                let index = index1 * F::LANES + index2;
+                indices.iter().for_each(|shape_index| {
+                    let (inserted_indices, inserted_rays) = &mut hit_shapes[*shape_index];
+                    let inserted_index2 = inserted_indices.len() % F::LANES;
+                    if inserted_index2 == 0 {
+                        let mut inserted_ray = Ray::default();
+                        inserted_ray.replace(0, ray.extract(index2));
+                        inserted_rays.push(inserted_ray);
+                    } else {
+                        inserted_rays
+                            .last_mut()
+                            .unwrap()
+                            .replace(inserted_index2, ray.extract(index2));
+                    }
+                    inserted_indices.push(index);
+                });
+            });
+        });
+        let mut hit_records = vec![HitRecord::<F>::default(); rays.len()];
+        let mut colors = vec![Vector3::from_element(F::splat(1.0f32)); rays.len()];
+        hit_shapes
+            .into_iter()
+            .enumerate()
+            .for_each(|(shape_index, (ray_indices, rays))| {
+                let shape = &self.spheres[shape_index];
+                let x = shape_index as f32 / (NUM - 1) as f32;
+                let color = Vector3::new(0.55, 0.9 - 0.7 * x, 0.2 + 0.7 * x);
+                rays.into_iter().enumerate().for_each(|(index1, ray)| {
+                    let hit_record = shape.hit(&ray, F::zero(), F::splat(f32::INFINITY));
+                    (0..F::LANES).for_each(|index2| {
+                        if hit_record.mask.extract(index2) {
+                            let ray_index = ray_indices[index1 * F::LANES + index2];
+                            let ray_index1 = ray_index / F::LANES;
+                            let ray_index2 = ray_index % F::LANES;
+                            if hit_records[ray_index1].t.extract(ray_index2)
+                                > hit_record.t.extract(index2)
+                            {
+                                hit_records[ray_index1]
+                                    .replace(ray_index2, hit_record.extract(index2));
+                                colors[ray_index1].replace(ray_index2, color);
+                            }
+                        }
+                    });
+                });
+            });
         let mut lock = self.screen.write().unwrap();
         lock.0
             .iter_mut()
             .zip(colors.into_iter())
-            .for_each(|(sum, (v, _mask))| {
+            .for_each(|(sum, v)| {
                 *sum += v;
             });
         lock.1 += 1;
@@ -325,6 +338,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for _ in 0..num_cpus::get() {
             spawn_render();
         }
+        spawn_render();
         while render_rx.recv().is_ok() {
             spawn_render();
         }
