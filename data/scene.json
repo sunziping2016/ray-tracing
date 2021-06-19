@@ -1,13 +1,13 @@
 {
   "image": {
-    "width": 1200,
-    "height": 800
+    "width": 800,
+    "height": 600
   },
   "camera": {
     "look_from": [
-      600,
-      600,
-      600
+      0,
+      1000,
+      -1000
     ],
     "look_at": [
       0,
@@ -15,6 +15,6 @@
       0
     ],
     "vfov": 40,
-    "aperture": 40
+    "aperture": 20
   }
 }

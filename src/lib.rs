@@ -5,6 +5,7 @@
 
 use crate::simd::MySimdVector;
 use nalgebra::{SimdRealField, SimdValue};
+use std::fmt::Debug;
 
 pub mod bvh;
 pub mod camera;
@@ -21,11 +22,14 @@ pub const EPSILON: f32 = 0.00001;
 
 pub trait SimdF32Field: SimdRealField<Element = f32> + MySimdVector {}
 
-pub trait SimdBoolField<F: SimdValue>: SimdValue<Element = bool, SimdBool = F::SimdBool> {}
+pub trait SimdBoolField<F: SimdValue>:
+    SimdValue<Element = bool, SimdBool = F::SimdBool> + Debug
+{
+}
 
 impl<T> SimdF32Field for T where T: SimdRealField<Element = f32> + MySimdVector {}
 
 impl<T, F: SimdValue> SimdBoolField<F> for T where
-    T: SimdValue<Element = bool, SimdBool = F::SimdBool>
+    T: SimdValue<Element = bool, SimdBool = F::SimdBool> + Debug
 {
 }

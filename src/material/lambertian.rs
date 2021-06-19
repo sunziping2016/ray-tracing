@@ -25,13 +25,7 @@ impl<T: Texture> Material for Lambertian<T> {
         F::SimdBool: SimdBoolField<F>,
     = CosinePdf<F>;
 
-    fn emitted<F>(
-        &self,
-        _r_in: &Ray<F>,
-        _hit_record: &HitRecord<F>,
-        _uv: &Vector2<F>,
-        _p: &Vector3<F>,
-    ) -> Vector3<F>
+    fn emitted<F>(&self, _uv: &Vector2<F>, _p: &Vector3<F>) -> Vector3<F>
     where
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>,
@@ -42,16 +36,16 @@ impl<T: Texture> Material for Lambertian<T> {
         &self,
         _r_in: &Ray<F>,
         hit_record: &HitRecord<F>,
-    ) -> ScatterRecord<F, Self::Pdf<F>>
+    ) -> Option<ScatterRecord<F, Self::Pdf<F>>>
     where
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>,
     {
-        ScatterRecord {
+        Some(ScatterRecord {
             specular_ray: Ray::default(),
             attenuation: self.texture.value(hit_record.uv, hit_record.p),
             pdf: CosinePdf::new(hit_record.normal),
-        }
+        })
     }
     fn scattering_pdf<F>(&self, _r_in: &Ray<F>, hit_record: &HitRecord<F>, scattered: &Ray<F>) -> F
     where

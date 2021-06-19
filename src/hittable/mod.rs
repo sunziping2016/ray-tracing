@@ -47,7 +47,7 @@ where
             t: self.t.extract(i),
             uv: self.uv.extract(i),
             front_face: self.front_face.extract(i),
-            mask: self.front_face.extract(i),
+            mask: self.mask.extract(i),
         }
     }
     unsafe fn extract_unchecked(&self, i: usize) -> Self::Element {
@@ -57,7 +57,7 @@ where
             t: self.t.extract_unchecked(i),
             uv: self.uv.extract_unchecked(i),
             front_face: self.front_face.extract_unchecked(i),
-            mask: self.front_face.extract_unchecked(i),
+            mask: self.mask.extract_unchecked(i),
         }
     }
     fn replace(&mut self, i: usize, val: Self::Element) {

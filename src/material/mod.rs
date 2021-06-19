@@ -19,13 +19,7 @@ pub trait Material {
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>;
 
-    fn emitted<F>(
-        &self,
-        r_in: &Ray<F>,
-        hit_record: &HitRecord<F>,
-        uv: &Vector2<F>,
-        p: &Vector3<F>,
-    ) -> Vector3<F>
+    fn emitted<F>(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F>
     where
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>;
@@ -33,7 +27,7 @@ pub trait Material {
         &self,
         r_in: &Ray<F>,
         hit_record: &HitRecord<F>,
-    ) -> ScatterRecord<F, Self::Pdf<F>>
+    ) -> Option<ScatterRecord<F, Self::Pdf<F>>>
     where
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>;
@@ -50,21 +44,19 @@ impl<M: Material> Material for Arc<M> {
         F::SimdBool: SimdBoolField<F>,
     = M::Pdf<F>;
 
-    fn emitted<F>(
-        &self,
-        r_in: &Ray<F>,
-        hit_record: &HitRecord<F>,
-        uv: &Vector2<F>,
-        p: &Vector3<F>,
-    ) -> Vector3<F>
+    fn emitted<F>(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F>
     where
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>,
     {
-        (**self).emitted(r_in, hit_record, uv, p)
+        (**self).emitted(uv, p)
     }
 
-    fn scatter<F>(&self, r_in: &Ray<F>, hit_record: &HitRecord<F>) -> ScatterRecord<F, Self::Pdf<F>>
+    fn scatter<F>(
+        &self,
+        r_in: &Ray<F>,
+        hit_record: &HitRecord<F>,
+    ) -> Option<ScatterRecord<F, Self::Pdf<F>>>
     where
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>,
