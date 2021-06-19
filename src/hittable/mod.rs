@@ -1,8 +1,11 @@
 pub mod sphere;
 
 use crate::bvh::aabb::AABB;
+use crate::extract;
 use crate::ray::Ray;
+use crate::simd::MySimdVector;
 use crate::{SimdBoolField, SimdF32Field};
+use arrayvec::ArrayVec;
 use auto_impl::auto_impl;
 use nalgebra::{ClosedAdd, Scalar, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
 use num_traits::Zero;
@@ -16,6 +19,38 @@ pub struct HitRecord<F: SimdValue> {
     pub uv: Vector2<F>,
     pub front_face: F::SimdBool,
     pub mask: F::SimdBool,
+}
+
+impl<F: SimdValue> From<&[HitRecord<f32>]> for HitRecord<F>
+where
+    F: MySimdVector + From<[f32; F::LANES]>,
+    F::SimdBool: From<[bool; F::LANES]>,
+{
+    fn from(records: &[HitRecord<f32>]) -> Self {
+        let p_x = extract!(records, |x| x.p[0]);
+        let p_y = extract!(records, |x| x.p[1]);
+        let p_z = extract!(records, |x| x.p[2]);
+        let normal_x = extract!(records, |x| x.normal[0]);
+        let normal_y = extract!(records, |x| x.normal[1]);
+        let normal_z = extract!(records, |x| x.normal[2]);
+        let t = extract!(records, |x| x.t);
+        let u = extract!(records, |x| x.uv[0]);
+        let v = extract!(records, |x| x.uv[1]);
+        let front_face = extract!(records, |x| x.front_face);
+        let mask = extract!(records, |x| x.mask);
+        Self {
+            p: Vector3::new(F::from(p_x), F::from(p_y), F::from(p_z)),
+            normal: UnitVector3::new_unchecked(Vector3::new(
+                F::from(normal_x),
+                F::from(normal_y),
+                F::from(normal_z),
+            )),
+            t: F::from(t),
+            uv: Vector2::new(F::from(u), F::from(v)),
+            front_face: F::SimdBool::from(front_face),
+            mask: F::SimdBool::from(mask),
+        }
+    }
 }
 
 impl<F: SimdValue> SimdValue for HitRecord<F>

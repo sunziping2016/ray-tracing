@@ -2,6 +2,7 @@
 #![feature(const_generics)]
 #![feature(const_evaluatable_checked)]
 #![feature(generic_associated_types)]
+#![recursion_limit = "256"]
 
 use crate::simd::MySimdVector;
 use nalgebra::{SimdRealField, SimdValue};
@@ -32,4 +33,16 @@ impl<T> SimdF32Field for T where T: SimdRealField<Element = f32> + MySimdVector 
 impl<T, F: SimdValue> SimdBoolField<F> for T where
     T: SimdValue<Element = bool, SimdBool = F::SimdBool> + Debug
 {
+}
+
+#[macro_export]
+macro_rules! extract {
+    ($rays:ident, $mapper:expr) => {
+        $rays
+            .iter()
+            .map($mapper)
+            .collect::<ArrayVec<_, { F::LANES }>>()
+            .into_inner()
+            .unwrap()
+    };
 }

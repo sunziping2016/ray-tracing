@@ -1,4 +1,7 @@
 use crate::bvh::aabb::AABB;
+use crate::extract;
+use crate::simd::MySimdVector;
+use arrayvec::ArrayVec;
 use nalgebra::{ClosedAdd, Scalar, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector3};
 use num_traits::{One, Zero};
 
@@ -8,6 +11,33 @@ pub struct Ray<F: SimdValue> {
     direction: UnitVector3<F>,
     time: F,
     mask: F::SimdBool,
+}
+
+impl<F: SimdValue> From<&[Ray<f32>]> for Ray<F>
+where
+    F: MySimdVector + From<[f32; F::LANES]>,
+    F::SimdBool: From<[bool; F::LANES]>,
+{
+    fn from(rays: &[Ray<f32>]) -> Self {
+        let origin_x = extract!(rays, |x| x.origin[0]);
+        let origin_y = extract!(rays, |x| x.origin[1]);
+        let origin_z = extract!(rays, |x| x.origin[2]);
+        let direction_x = extract!(rays, |x| x.direction[0]);
+        let direction_y = extract!(rays, |x| x.direction[1]);
+        let direction_z = extract!(rays, |x| x.direction[2]);
+        let time = extract!(rays, |x| x.time);
+        let mask = extract!(rays, |x| x.mask);
+        Self {
+            origin: Vector3::new(F::from(origin_x), F::from(origin_y), F::from(origin_z)),
+            direction: UnitVector3::new_unchecked(Vector3::new(
+                F::from(direction_x),
+                F::from(direction_y),
+                F::from(direction_z),
+            )),
+            time: F::from(time),
+            mask: F::SimdBool::from(mask),
+        }
+    }
 }
 
 impl<F: SimdValue> Default for Ray<F>

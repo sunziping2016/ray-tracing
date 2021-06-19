@@ -3,6 +3,7 @@
 #![feature(const_evaluatable_checked)]
 #![feature(array_map)]
 
+use arrayvec::ArrayVec;
 use async_channel::Sender;
 use core::array;
 use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
@@ -13,6 +14,7 @@ use rand::{thread_rng, Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use ray_tracing::bvh::bvh::BVH;
 use ray_tracing::camera::{Camera, CameraParam};
+use ray_tracing::extract;
 use ray_tracing::hittable::sphere::Sphere;
 use ray_tracing::hittable::{HitRecord, Hittable};
 use ray_tracing::image::ImageParam;
@@ -24,13 +26,15 @@ use ray_tracing::simd::MyFromSlice;
 use ray_tracing::texture::solid_color::SolidColor;
 use ray_tracing::{SimdBoolField, SimdF32Field};
 use serde::{Deserialize, Serialize};
-use simba::simd::f32x8;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::future::Future;
 use std::process;
 use std::sync::{mpsc, Arc, RwLock};
+use std::time::SystemTime;
+
+type Float = simba::simd::f32x8;
 
 #[derive(Debug, Clone)]
 enum Event {
@@ -109,6 +113,7 @@ where
     bvh: BVH,
     screen: RwLock<(Vec<Vector3<F>>, usize)>,
     background: Vector3<f32>,
+    start: SystemTime,
 }
 
 const NUM: usize = 200;
@@ -123,11 +128,11 @@ where
         let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
         let default_aspect_ratio = scene.image.aspect_ratio();
         let camera_param = scene.camera.clone();
-        let mut rng = Pcg64::seed_from_u64(0);
+        let mut rng = Pcg64::seed_from_u64(2);
         let (mut hittables, mut materials): (Vec<_>, Vec<_>) = (0..NUM)
             .map(|shape_index| {
                 let x = shape_index as f32 / (NUM - 1) as f32;
-                let color = Vector3::new(0.8, 0.9 - 0.2 * x, 0.7 + 0.2 * x);
+                let color = Vector3::new(0.0, 0.9 - 0.5 * x, 0.4 + 0.5 * x);
                 (
                     Sphere::new(
                         Vector3::new(
@@ -135,13 +140,13 @@ where
                             rng.gen_range(-300f32..300f32),
                             rng.gen_range(-300f32..300f32),
                         ),
-                        36.0f32,
+                        30.0f32,
                     ),
                     Lambertian::new(SolidColor::new(color)),
                 )
             })
             .unzip();
-        hittables.push(Sphere::new(Vector3::new(0f32, -3336f32, 0f32), 3000f32));
+        hittables.push(Sphere::new(Vector3::new(0f32, -20336f32, 0f32), 20000f32));
         materials.push(Lambertian::new(SolidColor::new(Vector3::new(
             1.0, 1.0, 1.0,
         ))));
@@ -159,16 +164,19 @@ where
             materials,
             bvh,
             background: Vector3::new(1.0f32, 1.0f32, 1.0f32),
+            start: SystemTime::now(),
         }
     }
     pub fn ray_color<R: Rng>(&self, rays: Vec<Ray<F>>, depth: u64, rng: &mut R) -> Vec<Vector3<F>>
     where
         [(); F::LANES]: Sized,
+        F: From<[f32; F::LANES]>,
+        F::SimdBool: From<[bool; F::LANES]>,
     {
         if depth == 0 {
             return vec![Zero::zero(); rays.len()];
         }
-        let mut hit_shapes: Vec<(Vec<usize>, Vec<Ray<F>>)> =
+        let mut hit_shapes: Vec<(Vec<usize>, Vec<Ray<f32>>)> =
             vec![(Vec::new(), Vec::new()); self.hittables.len()];
         rays.iter().enumerate().for_each(|(index1, ray)| {
             array::IntoIter::new(
@@ -176,158 +184,173 @@ where
                     .traverse(ray, F::splat(0f32), F::splat(f32::INFINITY)),
             )
             .enumerate()
-            .filter(move |(index2, indices)| ray.mask().extract(*index2) && !indices.is_empty())
+            .filter(move |(index2, indices)| unsafe { ray.mask().extract_unchecked(*index2) } && !indices.is_empty())
             .for_each(|(index2, indices)| {
                 let ray_index = index1 * F::LANES + index2;
                 indices.iter().for_each(|shape_index| {
                     let (inserted_indices, inserted_rays) = &mut hit_shapes[*shape_index];
-                    let inserted_index2 = inserted_indices.len() % F::LANES;
-                    if inserted_index2 == 0 {
-                        inserted_rays.push(Ray::default());
-                    }
-                    inserted_rays
-                        .last_mut()
-                        .unwrap()
-                        .replace(inserted_index2, ray.extract(index2));
+                    inserted_rays.push(unsafe { ray.extract_unchecked(index2) });
                     inserted_indices.push(ray_index);
                 });
             });
         });
-        // (shape_index, hit_record)
         let mut hit_records =
             vec![(usize::MAX, HitRecord::<f32>::default()); rays.len() * F::LANES];
         let mut hit_ray_indices = Vec::new();
         hit_shapes
             .into_iter()
             .enumerate()
-            .for_each(|(shape_index, (ray_indices, rays))| {
+            .for_each(|(shape_index, (ray_indices, mut rays))| {
                 let shape = &self.hittables[shape_index];
-                rays.into_iter().enumerate().for_each(|(index1, ray)| {
-                    let hit_record = shape.hit(&ray, F::zero(), F::splat(f32::INFINITY));
-                    (0..F::LANES)
-                        .take_while(|index2| ray.mask().extract(*index2))
-                        .filter(|index2| hit_record.mask.extract(*index2))
-                        .for_each(|index2| {
-                            let ray_index = ray_indices[index1 * F::LANES + index2];
-                            let record = &mut hit_records[ray_index];
-                            if record.1.t > hit_record.t.extract(index2) {
-                                if !record.1.mask {
-                                    hit_ray_indices.push(ray_index);
+                let rays_padding = rays.len() % F::LANES;
+                if rays_padding != 0 {
+                    rays.extend((0..(F::LANES - rays_padding)).map(|_| Ray::default()));
+                }
+                (0..rays.len())
+                    .step_by(F::LANES)
+                    .into_iter()
+                    .for_each(|index1| {
+                        let ray = Ray::<F>::from(&rays[index1..(index1 + F::LANES)]);
+                        let hit_record = shape.hit(&ray, F::zero(), F::splat(f32::INFINITY));
+                        (0..F::LANES)
+                            .take_while(|index2| unsafe { ray.mask().extract_unchecked(*index2) })
+                            .filter(|index2| unsafe { hit_record.mask.extract_unchecked(*index2) })
+                            .for_each(|index2| {
+                                let ray_index = ray_indices[index1 + index2];
+                                let record = &mut hit_records[ray_index];
+                                if record.1.t > unsafe { hit_record.t.extract_unchecked(index2) } {
+                                    if !record.1.mask {
+                                        hit_ray_indices.push(ray_index);
+                                    }
+                                    record.0 = shape_index;
+                                    record.1 = unsafe { hit_record.extract_unchecked(index2) };
                                 }
-                                record.0 = shape_index;
-                                assert!(hit_record.extract(index2).mask);
-                                record.1 = hit_record.extract(index2);
-                            }
-                        });
-                });
+                            });
+                    });
             });
-        // println!("count hit_ray_indices: {:?}", hit_ray_indices);
+        let mut colors = vec![Vector3::splat(self.background); rays.len()];
+        if hit_ray_indices.is_empty() {
+            return colors;
+        }
         // shape_index => (ray_indices, rays, hit_records)
-        let mut hit_shapes: BTreeMap<usize, (Vec<usize>, Vec<Ray<F>>, Vec<HitRecord<F>>)> =
-            BTreeMap::new();
+        let mut hit_shapes: BTreeMap<usize, (_, Vec<Ray<f32>>, _)> = BTreeMap::new();
         hit_ray_indices.into_iter().for_each(|ray_index| {
-            let ray = rays[ray_index / F::LANES].extract(ray_index % F::LANES);
-            assert!(ray.mask());
+            let ray = unsafe { rays[ray_index / F::LANES].extract_unchecked(ray_index % F::LANES) };
             let (shape_index, hit_record) = hit_records[ray_index].clone();
-            assert!(hit_record.mask);
             let (ray_indices, rays, hit_records) = hit_shapes
                 .entry(shape_index)
                 .or_insert_with(|| (Vec::new(), Vec::new(), Vec::new()));
-            let index2 = ray_indices.len() % F::LANES;
-            if index2 == 0 {
-                rays.push(Ray::default());
-                hit_records.push(HitRecord::default());
-            }
-            rays.last_mut().unwrap().replace(index2, ray);
-            hit_records.last_mut().unwrap().replace(index2, hit_record);
+            rays.push(ray);
+            hit_records.push(hit_record);
             ray_indices.push(ray_index);
         });
-        let mut colors = vec![Vector3::splat(self.background); rays.len()];
         // (rays, (coef, emitted, indices))
         let mut scattered_rays = Vec::new();
         let mut scattered_coef = Vec::new();
         let mut scattered_indices = Vec::new();
-        hit_shapes
-            .into_iter()
-            .for_each(|(shape_index, (ray_indices, rays, hit_records))| {
+        hit_shapes.into_iter().for_each(
+            |(shape_index, (ray_indices, mut rays, mut hit_records))| {
                 let material = &self.materials[shape_index];
-                rays.iter().zip(hit_records.iter()).enumerate().for_each(
-                    |(index1, (ray, hit_record))| {
-                        let emitted = material.emitted(&hit_record.uv, &hit_record.p);
-                        let mask = ray.mask();
-                        (0..F::LANES)
-                            .take_while(|index2| mask.extract(*index2))
-                            .for_each(|index2| {
-                                assert!(hit_record.mask.extract(index2));
-                                let ray_index = ray_indices[index1 * F::LANES + index2];
-                                colors[ray_index / F::LANES]
-                                    .replace(ray_index % F::LANES, emitted.extract(index2))
-                            });
-                        let scatter_record = {
-                            match material.scatter(ray, hit_record) {
-                                Some(scatter_record) => scatter_record,
-                                None => return,
-                            }
-                        };
-                        let scattered = Ray::new(
-                            hit_record.p,
-                            scatter_record.pdf.generate(rng),
-                            *ray.time(),
-                            ray.mask(),
-                        );
-                        let coef = scatter_record.attenuation
-                            * material.scattering_pdf(ray, hit_record, &scattered)
-                            / scatter_record.pdf.value(scattered.direction());
-                        (0..F::lanes())
-                            .take_while(|index2| mask.extract(*index2))
-                            .for_each(|index2| {
-                                assert!(hit_record.mask.extract(index2));
-                                let ray_index = ray_indices[index1 * F::LANES + index2];
-                                let inserted_index2 = scattered_indices.len() % F::LANES;
-                                if inserted_index2 == 0 {
-                                    scattered_rays.push(Ray::default());
-                                    scattered_coef.push(Vector3::from_element(F::splat(f32::NAN)));
-                                }
-                                scattered_rays
-                                    .last_mut()
-                                    .unwrap()
-                                    .replace(inserted_index2, scattered.extract(index2));
-                                assert!(!coef.extract(index2)[0].is_nan());
-                                scattered_coef
-                                    .last_mut()
-                                    .unwrap()
-                                    .replace(inserted_index2, coef.extract(index2));
-                                scattered_indices.push(ray_index);
-                            });
-                    },
-                );
-            });
-        if !scattered_indices.is_empty() {
-            let new_colors = self.ray_color(scattered_rays, depth - 1, rng);
-            new_colors
-                .into_iter()
-                .zip(scattered_coef.into_iter())
-                .enumerate()
-                .for_each(|(index1, (new_color, coef))| {
-                    let extra_color = new_color.component_mul(&coef);
+                assert_eq!(rays.len(), hit_records.len());
+                let rays_padding = rays.len() % F::LANES;
+                if rays_padding != 0 {
+                    rays.extend((0..(F::LANES - rays_padding)).map(|_| Ray::default()));
+                    hit_records
+                        .extend((0..(F::LANES - rays_padding)).map(|_| HitRecord::default()));
+                }
+                (0..rays.len()).step_by(F::LANES).for_each(|index1| {
+                    let ray = Ray::<F>::from(&rays[index1..(index1 + F::LANES)]);
+                    let hit_record =
+                        HitRecord::<F>::from(&hit_records[index1..(index1 + F::LANES)]);
+                    let emitted = material.emitted(&hit_record.uv, &hit_record.p);
+                    let mask = ray.mask();
                     (0..F::LANES)
-                        .take_while(|index2| index1 * F::LANES + index2 < scattered_indices.len())
+                        .take_while(|index2| unsafe { mask.extract_unchecked(*index2) })
                         .for_each(|index2| {
-                            let scattered_index = scattered_indices[index1 * F::LANES + index2];
-                            let ray_index1 = scattered_index / F::LANES;
-                            let ray_index2 = scattered_index % F::LANES;
-                            assert!(!extra_color.extract(index2)[0].is_nan());
-                            let color = colors[ray_index1].extract(ray_index2)
-                                + extra_color.extract(index2);
-                            colors[ray_index1].replace(ray_index2, color);
-                        })
+                            let ray_index = ray_indices[index1 + index2];
+                            unsafe {
+                                colors[ray_index / F::LANES].replace_unchecked(
+                                    ray_index % F::LANES,
+                                    emitted.extract_unchecked(index2),
+                                )
+                            }
+                        });
+                    let scatter_record = {
+                        match material.scatter(&ray, &hit_record) {
+                            Some(scatter_record) => scatter_record,
+                            None => return,
+                        }
+                    };
+                    let scattered = Ray::new(
+                        hit_record.p,
+                        scatter_record.pdf.generate(rng),
+                        *ray.time(),
+                        ray.mask(),
+                    );
+                    let coef = scatter_record.attenuation
+                        * material.scattering_pdf(&ray, &hit_record, &scattered)
+                        / scatter_record.pdf.value(scattered.direction());
+                    (0..F::lanes())
+                        .take_while(|index2| unsafe { mask.extract_unchecked(*index2) })
+                        .for_each(|index2| {
+                            let ray_index = ray_indices[index1 + index2];
+                            scattered_rays.push(unsafe { scattered.extract_unchecked(index2) });
+                            scattered_coef.push(unsafe { coef.extract_unchecked(index2) });
+                            scattered_indices.push(ray_index);
+                        });
                 });
+            },
+        );
+        if scattered_indices.is_empty() {
+            return colors;
         }
+        let rays_padding = scattered_rays.len() % F::LANES;
+        if rays_padding != 0 {
+            scattered_rays.extend((0..(F::LANES - rays_padding)).map(|_| Ray::default()));
+            scattered_coef
+                .extend((0..(F::LANES - rays_padding)).map(|_| Vector3::from_element(f32::NAN)));
+        }
+        let scattered_rays = (0..scattered_rays.len())
+            .step_by(F::LANES)
+            .map(|index| Ray::<F>::from(&scattered_rays[index..(index + F::LANES)]))
+            .collect::<Vec<_>>();
+        let scattered_coef = (0..scattered_coef.len())
+            .step_by(F::LANES)
+            .map(|index| {
+                let coef = &scattered_coef[index..(index + F::LANES)];
+                let r = extract!(coef, |x| x[0]);
+                let g = extract!(coef, |x| x[1]);
+                let b = extract!(coef, |x| x[2]);
+                Vector3::new(F::from(r), F::from(g), F::from(b))
+            })
+            .collect::<Vec<_>>();
+        let new_colors = self.ray_color(scattered_rays, depth - 1, rng);
+        new_colors
+            .into_iter()
+            .zip(scattered_coef.into_iter())
+            .enumerate()
+            .for_each(|(index1, (new_color, coef))| {
+                let extra_color = new_color.component_mul(&coef);
+                (0..F::LANES)
+                    .map(|index2| (index2, index1 * F::LANES + index2))
+                    .take_while(|(_, index)| *index < scattered_indices.len())
+                    .for_each(|(index2, index)| {
+                        let scattered_index = scattered_indices[index];
+                        let ray_index1 = scattered_index / F::LANES;
+                        let ray_index2 = scattered_index % F::LANES;
+                        unsafe {
+                            let color = colors[ray_index1].extract_unchecked(ray_index2)
+                                + extra_color.extract_unchecked(index2);
+                            colors[ray_index1].replace_unchecked(ray_index2, color);
+                        }
+                    })
+            });
         colors
     }
     pub fn run(&self)
     where
-        F: MyFromSlice,
+        F: MyFromSlice + From<[f32; F::LANES]>,
+        F::SimdBool: From<[bool; F::LANES]>,
         [(); F::LANES]: Sized,
     {
         let mut rng = thread_rng();
@@ -347,7 +370,11 @@ where
                 *sum += v;
             });
         lock.1 += 1;
-        println!("Iter {}", lock.1)
+        println!(
+            "Iter {} +{}s",
+            lock.1,
+            self.start.elapsed().unwrap().as_secs()
+        )
     }
     pub fn get(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
     where
@@ -368,9 +395,10 @@ where
         let max: <F as SimdValue>::Element = cast(255.5).unwrap();
         iproduct!(0..height, 0..width).for_each(|(y, x)| {
             let index = y * width + x;
-            let (index1, index2) = (index / f32x8::lanes(), index % f32x8::lanes());
+            let (index1, index2) = (index / F::lanes(), index % F::lanes());
             let base = index * 3;
-            let color = colors[index1].map(|x| cast(clamp(x.extract(index2), min, max)).unwrap());
+            let color = colors[index1]
+                .map(|x| cast(clamp(unsafe { x.extract_unchecked(index2) }, min, max)).unwrap());
             (0..3).for_each(|index| bytes[base + index] = color[index]);
         });
         Some((
@@ -402,7 +430,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         process::exit(1);
     }
 
-    let state: Arc<Render<f32x8>> = Arc::new(Render::new(serde_json::from_reader(File::open(
+    let state: Arc<Render<Float>> = Arc::new(Render::new(serde_json::from_reader(File::open(
         "data/scene.json",
     )?)?));
     let (msg_tx, msg_rx) = async_channel::bounded(16);
@@ -480,7 +508,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Trigger drawing
     {
-        let _ = glib::source::timeout_add(1000 / 30, move || {
+        let _ = glib::source::timeout_add(1000, move || {
             let tx = msg_tx.clone();
             spawn(async move {
                 let _ = tx.send(Event::RedrawTimeout).await;
