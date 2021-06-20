@@ -18,6 +18,7 @@ use ray_tracing::camera::{Camera, CameraParam};
 use ray_tracing::hittable::sphere::Sphere;
 use ray_tracing::hittable::{HitRecord, Hittable};
 use ray_tracing::image::ImageParam;
+use ray_tracing::material::dielectric::Dielectric;
 use ray_tracing::material::lambertian::Lambertian;
 use ray_tracing::material::metal::Metal;
 use ray_tracing::material::{Material, ScatterRecord};
@@ -26,10 +27,12 @@ use ray_tracing::texture::solid_color::SolidColor;
 use ray_tracing::{extract, EPSILON};
 use ray_tracing::{SimdBoolField, SimdF32Field};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::array::IntoIter;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::fs::File;
 use std::future::Future;
+use std::iter::FromIterator;
 use std::process;
 use std::sync::{mpsc, Arc, RwLock};
 use std::time::SystemTime;
@@ -125,6 +128,27 @@ where
     F::SimdBool: SimdBoolField<F>,
 {
     pub fn new(scene: SceneParam) -> Self {
+        let metallic_albedo = HashMap::<_, _>::from_iter(IntoIter::new([
+            // ("Iron", Vector3::new(198u8, 198u8, 200u8)),
+            // ("Brass", Vector3::new(214u8, 185u8, 123u8)),
+            ("Copper", Vector3::new(250u8, 208u8, 192u8)),
+            // ("Gold", Vector3::new(255u8, 226u8, 155u8)),
+            // ("Aluminium", Vector3::new(245u8, 246u8, 246u8)),
+            // ("Chrome", Vector3::new(196u8, 197u8, 197u8)),
+            // ("Silver", Vector3::new(252u8, 250u8, 245u8)),
+            // ("Cobalt", Vector3::new(211u8, 210u8, 207u8)),
+            // ("Titanium", Vector3::new(195u8, 186u8, 177u8)),
+            // ("Platinum", Vector3::new(213u8, 208u8, 200u8)),
+            // ("Nickel", Vector3::new(211u8, 203u8, 190u8)),
+            // ("Zinc", Vector3::new(213u8, 234u8, 237u8)),
+            // ("Mercury", Vector3::new(229u8, 228u8, 228u8)),
+            // ("Palladium", Vector3::new(222u8, 217u8, 211u8)),
+        ]));
+        let metallic_albedo = metallic_albedo
+            .into_iter()
+            .map(|(_name, albedo)| albedo.map(|x| x as f32 / 255f32))
+            .collect::<Vec<_>>();
+
         let num_pixels = scene.image.height() * scene.image.width();
         let num_soa = (num_pixels + F::lanes() - 1) / F::lanes();
         let default_aspect_ratio = scene.image.aspect_ratio();
@@ -133,7 +157,17 @@ where
         let (mut hittables, mut materials): (Vec<_>, Vec<_>) = (0..NUM)
             .map(|shape_index| {
                 let x = shape_index as f32 / (NUM - 1) as f32;
-                let color = Vector3::new(0.0, 0.9 - 0.5 * x, 0.4 + 0.5 * x);
+                let material = if rng.gen_ratio(30, 100) {
+                    let color = Vector3::new(0.0, 0.9 - 0.5 * x, 0.4 + 0.5 * x);
+                    Box::new(Lambertian::new(SolidColor::new(color)))
+                        as Box<dyn Material<F, ThreadRng> + Send + Sync>
+                } else if rng.gen_ratio(35, 70) {
+                    let color = metallic_albedo[rng.gen_range(0..metallic_albedo.len())];
+                    Box::new(Metal::new(color, rng.gen_range(0.1f32..0.7f32)))
+                        as Box<dyn Material<F, ThreadRng> + Send + Sync>
+                } else {
+                    Box::new(Dielectric::new(1.5)) as Box<dyn Material<F, ThreadRng> + Send + Sync>
+                };
                 (
                     Sphere::new(
                         Vector3::new(
@@ -143,13 +177,7 @@ where
                         ),
                         30.0f32,
                     ),
-                    if rng.gen_ratio(20, 100) {
-                        Box::new(Lambertian::new(SolidColor::new(color)))
-                            as Box<dyn Material<F, ThreadRng> + Send + Sync>
-                    } else {
-                        Box::new(Metal::new(color, rng.gen_range(0f32..0.9f32)))
-                            as Box<dyn Material<F, ThreadRng> + Send + Sync>
-                    },
+                    material,
                 )
             })
             .unzip();
