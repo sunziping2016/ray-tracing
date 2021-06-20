@@ -39,3 +39,16 @@ where
     let y = phi.simd_sin() * xy;
     Vector3::new(x, y, z)
 }
+
+pub fn random_in_unit_sphere<F, R: Rng>(rng: &mut R) -> Vector3<F>
+where
+    F: SimdRealField<Element = f32> + MySimdVector,
+{
+    let theta = random_uniform::<F, _, _>(0f32..consts::PI, rng);
+    let v = random_uniform::<F, _, _>(0f32..1f32, rng);
+    let z = v * F::splat(2f32) - F::splat(1f32);
+    let sin_phi = (F::splat(1f32) - z * z).simd_sqrt();
+    let x = sin_phi * theta.simd_cos();
+    let y = sin_phi * theta.simd_sin();
+    Vector3::new(x, y, z)
+}

@@ -1,74 +1,37 @@
 pub mod lambertian;
+pub mod metal;
 
 use crate::hittable::HitRecord;
 use crate::pdf::Pdf;
 use crate::ray::Ray;
-use crate::{SimdBoolField, SimdF32Field};
+use auto_impl::auto_impl;
 use nalgebra::{SimdValue, Vector2, Vector3};
-use std::sync::Arc;
+use rand::Rng;
+use simba::simd::SimdRealField;
 
-pub struct ScatterRecord<F: SimdValue, P: Pdf<F>> {
-    pub specular_ray: Ray<F>,
-    pub attenuation: Vector3<F>,
-    pub pdf: P,
+pub enum ScatterRecord<F: SimdValue, R: Rng> {
+    Specular {
+        attenuation: Vector3<F>,
+        specular_ray: Ray<F>,
+    },
+    Scatter {
+        attenuation: Vector3<F>,
+        pdf: Box<dyn Pdf<F, R>>,
+    },
+    None,
 }
 
-pub trait Material {
-    type Pdf<F>: Pdf<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>;
-
-    fn emitted<F>(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>;
-    fn scatter<F>(
-        &self,
-        r_in: &Ray<F>,
-        hit_record: &HitRecord<F>,
-    ) -> Option<ScatterRecord<F, Self::Pdf<F>>>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>;
-    fn scattering_pdf<F>(&self, r_in: &Ray<F>, hit_record: &HitRecord<F>, scattered: &Ray<F>) -> F
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>;
-}
-
-impl<M: Material> Material for Arc<M> {
-    type Pdf<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    = M::Pdf<F>;
-
-    fn emitted<F>(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
-        (**self).emitted(uv, p)
+#[auto_impl(&, &mut, Box, Rc, Arc)]
+pub trait Material<F: SimdRealField, R: Rng> {
+    fn emitted(&self, _uv: &Vector2<F>, _p: &Vector3<F>) -> Vector3<F> {
+        Vector3::from_element(F::zero())
     }
-
-    fn scatter<F>(
+    fn scatter(
         &self,
-        r_in: &Ray<F>,
-        hit_record: &HitRecord<F>,
-    ) -> Option<ScatterRecord<F, Self::Pdf<F>>>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
-        (**self).scatter(r_in, hit_record)
-    }
-
-    fn scattering_pdf<F>(&self, r_in: &Ray<F>, hit_record: &HitRecord<F>, scattered: &Ray<F>) -> F
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
-        (**self).scattering_pdf(r_in, hit_record, scattered)
+        _r_in: &Ray<F>,
+        _hit_record: &HitRecord<F>,
+        _rng: &mut R,
+    ) -> ScatterRecord<F, R> {
+        ScatterRecord::None
     }
 }

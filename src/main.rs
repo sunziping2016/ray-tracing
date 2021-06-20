@@ -10,20 +10,20 @@ use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector3};
 use num_traits::{cast, clamp, Zero};
+use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use ray_tracing::bvh::bvh::BVH;
 use ray_tracing::camera::{Camera, CameraParam};
-use ray_tracing::extract;
 use ray_tracing::hittable::sphere::Sphere;
 use ray_tracing::hittable::{HitRecord, Hittable};
 use ray_tracing::image::ImageParam;
 use ray_tracing::material::lambertian::Lambertian;
-use ray_tracing::material::Material;
-use ray_tracing::pdf::Pdf;
+use ray_tracing::material::metal::Metal;
+use ray_tracing::material::{Material, ScatterRecord};
 use ray_tracing::ray::Ray;
-use ray_tracing::simd::MyFromSlice;
 use ray_tracing::texture::solid_color::SolidColor;
+use ray_tracing::{extract, EPSILON};
 use ray_tracing::{SimdBoolField, SimdF32Field};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -98,9 +98,10 @@ impl App {
 pub struct SceneParam {
     image: ImageParam,
     camera: CameraParam,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    max_depth: Option<u64>,
 }
 
-#[derive(Debug)]
 pub struct Render<F>
 where
     F: SimdF32Field,
@@ -109,7 +110,7 @@ where
     scene: SceneParam,
     camera: Camera<F>,
     hittables: Vec<Sphere>,
-    materials: Vec<Lambertian<SolidColor>>,
+    materials: Vec<Box<dyn Material<F, ThreadRng> + Send + Sync>>,
     bvh: BVH,
     screen: RwLock<(Vec<Vector3<F>>, usize)>,
     background: Vector3<f32>,
@@ -142,14 +143,20 @@ where
                         ),
                         30.0f32,
                     ),
-                    Lambertian::new(SolidColor::new(color)),
+                    if rng.gen_ratio(20, 100) {
+                        Box::new(Lambertian::new(SolidColor::new(color)))
+                            as Box<dyn Material<F, ThreadRng> + Send + Sync>
+                    } else {
+                        Box::new(Metal::new(color, rng.gen_range(0f32..0.9f32)))
+                            as Box<dyn Material<F, ThreadRng> + Send + Sync>
+                    },
                 )
             })
             .unzip();
         hittables.push(Sphere::new(Vector3::new(0f32, -20336f32, 0f32), 20000f32));
-        materials.push(Lambertian::new(SolidColor::new(Vector3::new(
-            1.0, 1.0, 1.0,
-        ))));
+        materials.push(Box::new(Lambertian::new(SolidColor::new(Vector3::new(
+            0.8, 0.8, 0.8,
+        )))));
         let bvh = BVH::build(
             &hittables
                 .iter()
@@ -167,7 +174,7 @@ where
             start: SystemTime::now(),
         }
     }
-    pub fn ray_color<R: Rng>(&self, rays: Vec<Ray<F>>, depth: u64, rng: &mut R) -> Vec<Vector3<F>>
+    pub fn ray_color(&self, rays: Vec<Ray<F>>, depth: u64, rng: &mut ThreadRng) -> Vec<Vector3<F>>
     where
         [(); F::LANES]: Sized,
         F: From<[f32; F::LANES]>,
@@ -181,7 +188,7 @@ where
         rays.iter().enumerate().for_each(|(index1, ray)| {
             array::IntoIter::new(
                 self.bvh
-                    .traverse(ray, F::splat(0f32), F::splat(f32::INFINITY)),
+                    .traverse(ray, F::splat(EPSILON), F::splat(f32::INFINITY)),
             )
             .enumerate()
             .filter(move |(index2, indices)| unsafe { ray.mask().extract_unchecked(*index2) } && !indices.is_empty())
@@ -211,7 +218,8 @@ where
                     .into_iter()
                     .for_each(|index1| {
                         let ray = Ray::<F>::from(&rays[index1..(index1 + F::LANES)]);
-                        let hit_record = shape.hit(&ray, F::zero(), F::splat(f32::INFINITY));
+                        let hit_record =
+                            shape.hit(&ray, F::splat(EPSILON), F::splat(f32::INFINITY));
                         (0..F::LANES)
                             .take_while(|index2| unsafe { ray.mask().extract_unchecked(*index2) })
                             .filter(|index2| unsafe { hit_record.mask.extract_unchecked(*index2) })
@@ -275,21 +283,32 @@ where
                                 )
                             }
                         });
-                    let scatter_record = {
-                        match material.scatter(&ray, &hit_record) {
-                            Some(scatter_record) => scatter_record,
-                            None => return,
+                    let (attenuation, pdf) = {
+                        match material.scatter(&ray, &hit_record, rng) {
+                            ScatterRecord::Scatter { attenuation, pdf } => (attenuation, pdf),
+                            ScatterRecord::Specular {
+                                attenuation,
+                                specular_ray,
+                            } => {
+                                (0..F::lanes())
+                                    .take_while(|index2| unsafe { mask.extract_unchecked(*index2) })
+                                    .for_each(|index2| {
+                                        let ray_index = ray_indices[index1 + index2];
+                                        scattered_rays.push(unsafe {
+                                            specular_ray.extract_unchecked(index2)
+                                        });
+                                        scattered_coef
+                                            .push(unsafe { attenuation.extract_unchecked(index2) });
+                                        scattered_indices.push(ray_index);
+                                    });
+                                return;
+                            }
+                            _ => return,
                         }
                     };
-                    let scattered = Ray::new(
-                        hit_record.p,
-                        scatter_record.pdf.generate(rng),
-                        *ray.time(),
-                        ray.mask(),
-                    );
-                    let coef = scatter_record.attenuation
-                        * material.scattering_pdf(&ray, &hit_record, &scattered)
-                        / scatter_record.pdf.value(scattered.direction());
+                    let scattered =
+                        Ray::new(hit_record.p, pdf.generate(rng), *ray.time(), ray.mask());
+                    let coef = attenuation;
                     (0..F::lanes())
                         .take_while(|index2| unsafe { mask.extract_unchecked(*index2) })
                         .for_each(|index2| {
@@ -349,7 +368,7 @@ where
     }
     pub fn run(&self)
     where
-        F: MyFromSlice + From<[f32; F::LANES]>,
+        F: From<[f32; F::LANES]>,
         F::SimdBool: From<[bool; F::LANES]>,
         [(); F::LANES]: Sized,
     {
@@ -361,7 +380,7 @@ where
             .into_iter()
             .map(|(st, mask)| self.camera.get_ray(st, mask, &mut rng))
             .collect::<Vec<_>>();
-        let colors = self.ray_color(rays, 20, &mut rng);
+        let colors = self.ray_color(rays, self.scene.max_depth.unwrap_or(20), &mut rng);
         let mut lock = self.screen.write().unwrap();
         lock.0
             .iter_mut()
@@ -385,9 +404,14 @@ where
         if new_last <= last {
             return None;
         }
-        let scale = F::splat(256.0 / lock.1 as f32);
-        let colors = lock.0.iter().map(|x| x.scale(scale)).collect::<Vec<_>>();
+        let scale1 = F::splat(1.0 / lock.1 as f32);
+        let scale2 = F::splat(256f32);
+        let colors = lock.0.clone();
         drop(lock);
+        let colors = colors
+            .into_iter()
+            .map(|x| x.scale(scale1).map(|x| x.simd_sqrt()).scale(scale2))
+            .collect::<Vec<_>>();
         let height = self.scene.image.height();
         let width = self.scene.image.width();
         let mut bytes: Vec<u8> = vec![255; height * width * 3];
@@ -479,6 +503,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             );
                             app.image.set_size_request(0, 0);
                             println!("redraw");
+                            new_pixbuf.savev("data/output.jpeg", "jpeg", &[]).unwrap();
                             pixbuf = Some(new_pixbuf);
                             last = new_last;
                         }

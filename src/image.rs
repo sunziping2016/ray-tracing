@@ -1,6 +1,7 @@
-use crate::simd::MyFromSlice;
+use crate::{extract, SimdF32Field};
+use arrayvec::ArrayVec;
 use itertools::iproduct;
-use nalgebra::{SimdRealField, Vector2};
+use nalgebra::Vector2;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::iter;
@@ -24,7 +25,7 @@ impl ImageParam {
     pub fn aspect_ratio(&self) -> f32 {
         self.width as f32 / self.height as f32
     }
-    pub fn sample<F: SimdRealField<Element = f32> + MyFromSlice, R: Rng>(
+    pub fn sample<F: SimdF32Field + From<[f32; F::LANES]>, R: Rng>(
         &self,
         rng: &mut R,
     ) -> Vec<(Vector2<F>, F::SimdBool)> {
@@ -40,10 +41,10 @@ impl ImageParam {
             .chain(iter::repeat((f32::NAN, f32::NAN)).take(F::lanes() - 1))
             .unzip();
         xs.chunks_exact(F::lanes())
-            .map(|chunk| F::from_slice(chunk))
+            .map(|chunk| F::from(extract!(chunk, |x| *x)))
             .zip(
                 ys.chunks_exact(F::lanes())
-                    .map(|chunk| F::from_slice(chunk)),
+                    .map(|chunk| F::from(extract!(chunk, |x| *x))),
             )
             .map(|(x, y)| (Vector2::new(x, y), x.simd_eq(x)))
             .collect()

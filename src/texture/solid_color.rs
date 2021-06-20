@@ -1,6 +1,5 @@
 use crate::texture::Texture;
-use crate::{SimdBoolField, SimdF32Field};
-use nalgebra::{SimdValue, Vector2, Vector3};
+use nalgebra::{SimdRealField, SimdValue, Vector2, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct SolidColor {
@@ -13,12 +12,11 @@ impl SolidColor {
     }
 }
 
-impl Texture for SolidColor {
-    fn value<F>(&self, _uv: Vector2<F>, _p: Vector3<F>) -> Vector3<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
+impl<F> Texture<F> for SolidColor
+where
+    F: SimdRealField<Element = f32>,
+{
+    fn value(&self, _uv: Vector2<F>, _p: Vector3<F>) -> Vector3<F> {
         Vector3::splat(self.color)
     }
 }

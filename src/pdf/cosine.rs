@@ -25,7 +25,7 @@ impl<F: SimdF32Field> CosinePdf<F> {
     }
 }
 
-impl<F> Pdf<F> for CosinePdf<F>
+impl<F, R: Rng> Pdf<F, R> for CosinePdf<F>
 where
     F: SimdF32Field,
 {
@@ -35,7 +35,7 @@ where
             .is_simd_positive()
             .if_else(|| cosine * F::simd_frac_1_pi(), F::zero)
     }
-    fn generate<R: Rng>(&self, rng: &mut R) -> UnitVector3<F> {
+    fn generate(&self, rng: &mut R) -> UnitVector3<F> {
         let r1 = random_uniform(0f32..1f32, rng);
         let r2 = random_uniform(0f32..1f32, rng);
         let z = (F::one() - r2).simd_sqrt();

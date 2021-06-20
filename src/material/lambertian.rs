@@ -4,57 +4,33 @@ use crate::pdf::cosine::CosinePdf;
 use crate::ray::Ray;
 use crate::texture::Texture;
 use crate::{SimdBoolField, SimdF32Field};
-use nalgebra::{SimdBool, Vector2, Vector3};
-use num_traits::Zero;
+use rand::Rng;
 
 #[derive(Debug, Clone)]
-pub struct Lambertian<T: Texture> {
+pub struct Lambertian<T> {
     texture: T,
 }
 
-impl<T: Texture> Lambertian<T> {
+impl<T> Lambertian<T> {
     pub fn new(texture: T) -> Self {
         Lambertian { texture }
     }
 }
 
-impl<T: Texture> Material for Lambertian<T> {
-    type Pdf<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    = CosinePdf<F>;
-
-    fn emitted<F>(&self, _uv: &Vector2<F>, _p: &Vector3<F>) -> Vector3<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
-        Zero::zero()
-    }
-    fn scatter<F>(
+impl<F, T: Texture<F>, R: Rng> Material<F, R> for Lambertian<T>
+where
+    F: SimdF32Field,
+    F::SimdBool: SimdBoolField<F>,
+{
+    fn scatter(
         &self,
         _r_in: &Ray<F>,
         hit_record: &HitRecord<F>,
-    ) -> Option<ScatterRecord<F, Self::Pdf<F>>>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
-        Some(ScatterRecord {
-            specular_ray: Ray::default(),
+        _rng: &mut R,
+    ) -> ScatterRecord<F, R> {
+        ScatterRecord::Scatter {
             attenuation: self.texture.value(hit_record.uv, hit_record.p),
-            pdf: CosinePdf::new(hit_record.normal),
-        })
-    }
-    fn scattering_pdf<F>(&self, _r_in: &Ray<F>, hit_record: &HitRecord<F>, scattered: &Ray<F>) -> F
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
-        let cosine = hit_record.normal.dot(scattered.direction());
-        cosine
-            .is_simd_positive()
-            .if_else(|| cosine * F::simd_frac_1_pi(), F::zero)
+            pdf: Box::new(CosinePdf::new(hit_record.normal)),
+        }
     }
 }

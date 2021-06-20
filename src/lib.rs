@@ -2,7 +2,8 @@
 #![feature(const_generics)]
 #![feature(const_evaluatable_checked)]
 #![feature(generic_associated_types)]
-#![recursion_limit = "256"]
+#![feature(never_type)]
+#![feature(associated_type_defaults)]
 
 use crate::simd::MySimdVector;
 use nalgebra::{SimdRealField, SimdValue};
@@ -38,11 +39,12 @@ impl<T, F: SimdValue> SimdBoolField<F> for T where
 #[macro_export]
 macro_rules! extract {
     ($rays:ident, $mapper:expr) => {
-        $rays
-            .iter()
-            .map($mapper)
-            .collect::<ArrayVec<_, { F::LANES }>>()
-            .into_inner()
-            .unwrap()
+        unsafe {
+            $rays
+                .iter()
+                .map($mapper)
+                .collect::<ArrayVec<_, { F::LANES }>>()
+                .into_inner_unchecked()
+        }
     };
 }

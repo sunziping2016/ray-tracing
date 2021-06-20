@@ -6,8 +6,8 @@
   "camera": {
     "look_from": [
       0,
-      1000,
-      -1000
+      600,
+      -600
     ],
     "look_at": [
       0,
@@ -15,6 +15,7 @@
       0
     ],
     "vfov": 40,
-    "aperture": 0
+    "aperture": 30,
+    "focus_dist": 548
   }
 }
