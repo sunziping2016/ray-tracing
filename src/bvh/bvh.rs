@@ -162,6 +162,12 @@ pub struct BVH {
 
 impl BVH {
     pub fn build(shapes: &[AABB]) -> Self {
+        if shapes.is_empty() {
+            return Self {
+                nodes: Vec::new(),
+                node_indices: Vec::new(),
+            };
+        }
         let shape_centroids = shapes.iter().map(|x| x.center()).collect::<Vec<_>>();
         let indices = (0..shapes.len()).collect::<Vec<_>>();
         let mut nodes = Vec::with_capacity(shapes.len() * 2);

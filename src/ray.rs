@@ -1,9 +1,13 @@
 use crate::bvh::aabb::AABB;
 use crate::extract;
+use crate::py::{bits_to_m, bits_to_numpy, PySimd};
 use crate::simd::MySimdVector;
 use arrayvec::ArrayVec;
 use nalgebra::{ClosedAdd, Scalar, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector3};
 use num_traits::{One, Zero};
+use numpy::{PyArray1, PyArray2};
+use pyo3::proc_macro::{pyclass, pymethods};
+use pyo3::Python;
 
 #[derive(Debug, Clone)]
 pub struct Ray<F: SimdValue> {
@@ -176,5 +180,86 @@ impl<F: SimdValue<Element = f32>> Ray<F> {
             return mask;
         }
         mask & update_and_test(aabb.min[2], aabb.max[2], self.origin[2], self.direction[2])
+    }
+}
+
+#[pyclass(name = "Ray")]
+#[derive(Debug, Clone)]
+pub struct PyRay {
+    origin: Vec<f32>,
+    direction: Vec<f32>,
+    time: [f32; PySimd::LANES],
+    mask: u64,
+}
+
+impl From<&Ray<PySimd>> for PyRay {
+    fn from(ray: &Ray<PySimd>) -> Self {
+        let origin = [
+            Into::<[f32; PySimd::LANES]>::into(ray.origin[0]),
+            ray.origin[1].into(),
+            ray.origin[2].into(),
+        ]
+        .concat();
+        let direction = [
+            Into::<[f32; PySimd::LANES]>::into(ray.direction[0]),
+            ray.direction.as_ref()[1].into(),
+            ray.direction.as_ref()[2].into(),
+        ]
+        .concat();
+        let time: [f32; PySimd::LANES] = ray.time.into();
+        let mask = ray.mask.bitmask();
+        Self {
+            origin,
+            direction,
+            time,
+            mask,
+        }
+    }
+}
+
+impl From<&PyRay> for Ray<PySimd> {
+    fn from(ray: &PyRay) -> Self {
+        let origin = Vector3::new(
+            PySimd::from_slice_unaligned(&ray.origin[0..PySimd::LANES]),
+            PySimd::from_slice_unaligned(&ray.origin[PySimd::LANES..(PySimd::LANES * 2)]),
+            PySimd::from_slice_unaligned(&ray.origin[(PySimd::LANES * 2)..(PySimd::LANES * 3)]),
+        );
+        let direction = UnitVector3::new_normalize(Vector3::new(
+            PySimd::from_slice_unaligned(&ray.direction[0..PySimd::LANES]),
+            PySimd::from_slice_unaligned(&ray.direction[PySimd::LANES..(PySimd::LANES * 2)]),
+            PySimd::from_slice_unaligned(&ray.direction[(PySimd::LANES * 2)..(PySimd::LANES * 3)]),
+        ));
+        let time = PySimd::from(ray.time);
+        let mask = bits_to_m::<PySimd>(ray.mask);
+        Self {
+            origin,
+            direction,
+            time,
+            mask,
+        }
+    }
+}
+
+#[pymethods]
+impl PyRay {
+    #[getter("origin")]
+    fn py_origin<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+        PyArray1::from_slice(py, &self.origin)
+            .reshape([3, PySimd::LANES])
+            .unwrap()
+    }
+    #[getter("direction")]
+    fn py_direction<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+        PyArray1::from_slice(py, &self.direction)
+            .reshape([3, PySimd::LANES])
+            .unwrap()
+    }
+    #[getter("time")]
+    fn py_time<'py>(&self, py: Python<'py>) -> &'py PyArray1<f32> {
+        PyArray1::from_slice(py, &self.time)
+    }
+    #[getter("mask")]
+    fn py_mask<'py>(&self, py: Python<'py>) -> &'py PyArray1<bool> {
+        bits_to_numpy::<PySimd>(py, self.mask)
     }
 }

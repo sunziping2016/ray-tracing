@@ -1,11 +1,18 @@
 use crate::bvh::aabb::AABB;
-use crate::hittable::{HitRecord, Hittable};
+use crate::hittable::py::PyHitRecord;
+use crate::hittable::{Bounded, HitRecord, Hittable};
+use crate::py::{numpy_to_f, PyRng, PySimd, PyVector3};
 use crate::random::random_to_sphere;
-use crate::ray::Ray;
+use crate::ray::{PyRay, Ray};
 use crate::{SimdBoolField, SimdF32Field};
 use nalgebra::{Rotation3, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3};
+use numpy::PyArray1;
+use pyo3::proc_macro::{pyclass, pymethods};
+use pyo3::PyResult;
 use rand::Rng;
 
+#[pyclass(name = "Sphere")]
+#[text_signature = "(center, radius, /)"]
 #[derive(Debug, Clone)]
 pub struct Sphere {
     center: Vector3<f32>,
@@ -16,27 +23,31 @@ impl Sphere {
     pub fn new(center: Vector3<f32>, radius: f32) -> Self {
         Sphere { center, radius }
     }
-    pub fn sphere_uv<F>(p: &Vector3<F>) -> (F, F)
-    where
-        F: SimdRealField,
-    {
-        let theta = -p[1].simd_acos();
-        let phi = (-p[2]).simd_atan2(p[1]) + F::simd_pi();
-        (phi / F::simd_two_pi(), theta * F::simd_frac_1_pi())
-    }
 }
 
-impl Hittable for Sphere {
+pub fn sphere_uv<F>(p: &Vector3<F>) -> (F, F)
+where
+    F: SimdRealField,
+{
+    let theta = -p[1].simd_acos();
+    let phi = (-p[2]).simd_atan2(p[1]) + F::simd_pi();
+    (phi / F::simd_two_pi(), theta * F::simd_frac_1_pi())
+}
+
+impl Bounded for Sphere {
     fn bounding_box(&self, _time0: f32, _time1: f32) -> AABB {
         let radius = Vector3::from_element(self.radius);
         AABB::with_bounds(self.center - radius, self.center + radius)
     }
+}
+
+impl<F, R: Rng> Hittable<F, R> for Sphere
+where
+    F: SimdF32Field,
+    F::SimdBool: SimdBoolField<F>,
+{
     #[allow(clippy::many_single_char_names)]
-    fn hit<F>(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
+    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
         let center = Vector3::splat(self.center);
         let oc: Vector3<F> = ray.origin() - center;
         let half_b = oc.dot(ray.direction());
@@ -59,7 +70,7 @@ impl Hittable for Sphere {
         let p = ray.at(t);
         let outward_normal = UnitVector3::new_normalize(p - center);
         let (front_face, normal) = HitRecord::face_normal(ray.direction(), outward_normal);
-        let (u, v) = Self::sphere_uv(outward_normal.as_ref());
+        let (u, v) = sphere_uv(outward_normal.as_ref());
         HitRecord {
             p,
             normal,
@@ -69,11 +80,7 @@ impl Hittable for Sphere {
             mask,
         }
     }
-    fn pdf_value<F>(&self, origin: &Vector3<F>, _direction: &Vector3<F>) -> F
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
+    fn pdf_value(&self, origin: &Vector3<F>, _direction: &Vector3<F>) -> F {
         let cos_theta_max = (F::one()
             - F::splat(self.radius * self.radius)
                 / (Vector3::splat(self.center) - origin).norm_squared())
@@ -81,11 +88,7 @@ impl Hittable for Sphere {
         let solid_angle = F::simd_two_pi() * (F::one() - cos_theta_max);
         solid_angle.simd_recip()
     }
-    fn random<F, R: Rng>(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F>
-    where
-        F: SimdF32Field,
-        F::SimdBool: SimdBoolField<F>,
-    {
+    fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
         let direction = Vector3::splat(self.center) - origin;
         let selector = direction.normalize()[0].simd_abs().simd_gt(F::splat(0.9));
         let up = Vector3::new(
@@ -95,5 +98,38 @@ impl Hittable for Sphere {
         );
         let rot = Rotation3::face_towards(&direction, &up);
         rot * random_to_sphere(rng, F::splat(self.radius), direction.norm_squared())
+    }
+}
+
+#[pymethods]
+impl Sphere {
+    #[new]
+    pub fn py_new(center: PyVector3, radius: f32) -> Self {
+        Self::new(Vector3::new(center.0, center.1, center.2), radius)
+    }
+    #[getter("center")]
+    pub fn py_center(&self) -> PyVector3 {
+        (self.center[0], self.center[1], self.center[2])
+    }
+    #[getter("radius")]
+    pub fn py_radius(&self) -> f32 {
+        self.radius
+    }
+    #[name = "bounding_box"]
+    pub fn py_bounding_box(&self, time0: f32, time1: f32) -> AABB {
+        self.bounding_box(time0, time1)
+    }
+    #[name = "hit"]
+    fn py_hit(
+        &self,
+        ray: &PyRay,
+        t_min: &PyArray1<f32>,
+        t_max: &PyArray1<f32>,
+    ) -> PyResult<PyHitRecord> {
+        let ray = Ray::<PySimd>::from(ray);
+        let t_min = numpy_to_f(t_min)?;
+        let t_max = numpy_to_f(t_max)?;
+        let hit_record = Hittable::<PySimd, PyRng>::hit(self, &ray, t_min, t_max);
+        Ok(PyHitRecord::from(&hit_record))
     }
 }

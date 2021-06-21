@@ -5,22 +5,31 @@
 #![feature(never_type)]
 #![feature(associated_type_defaults)]
 
+use crate::hittable::Hittable;
+use crate::material::Material;
 use crate::simd::MySimdVector;
+use crate::texture::Texture;
 use nalgebra::{SimdRealField, SimdValue};
 use std::fmt::Debug;
 
 pub mod bvh;
 pub mod camera;
 pub mod hittable;
-pub mod image;
 pub mod material;
 pub mod pdf;
+pub mod py;
 pub mod random;
 pub mod ray;
+pub mod renderer;
+pub mod scene;
 pub mod simd;
 pub mod texture;
 
-pub const EPSILON: f32 = 0.00001;
+pub const EPSILON: f32 = 0.001;
+
+pub type BoxedHittable<F, R> = Box<dyn Hittable<F, R> + Send + Sync>;
+pub type BoxedMaterial<F, R> = Box<dyn Material<F, R> + Send + Sync>;
+pub type BoxedTexture<F> = Box<dyn Texture<F> + Send + Sync>;
 
 pub trait SimdF32Field: SimdRealField<Element = f32> + MySimdVector {}
 

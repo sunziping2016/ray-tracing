@@ -1,9 +1,31 @@
+use crate::py::PyVector3;
 use nalgebra::Vector3;
+use pyo3::proc_macro::{pyclass, pymethods};
 
+#[pyclass(name = "AABB")]
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Vector3<f32>,
     pub max: Vector3<f32>,
+}
+
+#[pymethods]
+impl AABB {
+    #[new]
+    fn py_new(min: PyVector3, max: PyVector3) -> Self {
+        Self::with_bounds(
+            Vector3::new(min.0, min.1, min.2),
+            Vector3::new(max.0, max.1, max.2),
+        )
+    }
+    #[getter("min")]
+    fn py_min(&self) -> PyVector3 {
+        (self.min[0], self.min[1], self.min[2])
+    }
+    #[getter("max")]
+    fn py_max(&self) -> PyVector3 {
+        (self.max[0], self.max[1], self.max[2])
+    }
 }
 
 impl AABB {

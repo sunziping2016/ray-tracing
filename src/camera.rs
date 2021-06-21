@@ -1,28 +1,59 @@
+use crate::py::PyVector3;
 use crate::random::{random_in_unit_disk, random_uniform};
 use crate::ray::Ray;
 use crate::simd::MySimdVector;
 use nalgebra::{SimdRealField, Unit, UnitVector3, Vector2, Vector3};
+use pyo3::proc_macro::{pyclass, pymethods};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::f32::consts;
 
+#[pyclass(name = "CameraParam")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CameraParam {
-    look_from: Vector3<f32>,
-    look_at: Vector3<f32>,
+    pub look_from: Vector3<f32>,
+    pub look_at: Vector3<f32>,
+    pub vfov: f32,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    up: Option<Vector3<f32>>,
-    vfov: f32,
+    pub up: Option<Vector3<f32>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    aspect_ratio: Option<f32>,
+    pub aspect_ratio: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    aperture: Option<f32>,
+    pub aperture: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    focus_dist: Option<f32>,
+    pub focus_dist: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    time0: Option<f32>,
+    pub time0: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    time1: Option<f32>,
+    pub time1: Option<f32>,
+}
+
+#[pymethods]
+impl CameraParam {
+    #[new]
+    fn py_new(
+        look_from: PyVector3,
+        look_at: PyVector3,
+        vfov: f32,
+        up: Option<PyVector3>,
+        aspect_ratio: Option<f32>,
+        aperture: Option<f32>,
+        focus_dist: Option<f32>,
+        time0: Option<f32>,
+        time1: Option<f32>,
+    ) -> Self {
+        Self {
+            look_from: Vector3::new(look_from.0, look_from.1, look_from.2),
+            look_at: Vector3::new(look_at.0, look_at.1, look_at.2),
+            vfov,
+            up: up.map(|x| Vector3::new(x.0, x.1, x.2)),
+            aspect_ratio,
+            aperture,
+            focus_dist,
+            time0,
+            time1,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
