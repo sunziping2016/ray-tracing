@@ -41,7 +41,6 @@ where
 }
 
 #[pyclass(name = "Lambertian")]
-#[text_signature = "(texture, /)"]
 pub struct PyLambertian {
     inner: Lambertian<PyBoxedTexture>,
 }

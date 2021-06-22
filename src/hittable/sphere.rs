@@ -12,7 +12,6 @@ use pyo3::PyResult;
 use rand::Rng;
 
 #[pyclass(name = "Sphere")]
-#[text_signature = "(center, radius, /)"]
 #[derive(Debug, Clone)]
 pub struct Sphere {
     center: Vector3<f32>,

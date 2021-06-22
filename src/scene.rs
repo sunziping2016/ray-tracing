@@ -59,9 +59,9 @@ pub struct PyScene {
 impl PyScene {
     // TODO: iterable
     #[new]
-    pub fn py_new(bg_color: PyVector3) -> Self {
+    pub fn py_new(background: PyVector3) -> Self {
         Self {
-            inner: Scene::new(Vector3::new(bg_color.0, bg_color.1, bg_color.2)),
+            inner: Scene::new(Vector3::new(background.0, background.1, background.2)),
         }
     }
     #[name = "add"]
