@@ -11,6 +11,7 @@ use crate::simd::MySimdVector;
 use crate::texture::Texture;
 use nalgebra::{SimdRealField, SimdValue};
 use std::fmt::Debug;
+use std::sync::Arc;
 
 pub mod bvh;
 pub mod camera;
@@ -27,9 +28,9 @@ pub mod texture;
 
 pub const EPSILON: f32 = 0.001;
 
-pub type BoxedHittable<F, R> = Box<dyn Hittable<F, R> + Send + Sync>;
-pub type BoxedMaterial<F, R> = Box<dyn Material<F, R> + Send + Sync>;
-pub type BoxedTexture<F> = Box<dyn Texture<F> + Send + Sync>;
+pub type BoxedHittable<F, R> = Arc<dyn Hittable<F, R> + Send + Sync>;
+pub type BoxedMaterial<F, R> = Arc<dyn Material<F, R> + Send + Sync>;
+pub type BoxedTexture<F> = Arc<dyn Texture<F> + Send + Sync>;
 
 pub trait SimdF32Field: SimdRealField<Element = f32> + MySimdVector {}
 

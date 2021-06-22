@@ -8,6 +8,7 @@ use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::{Py, PyAny, Python};
 use rand::Rng;
 
+#[derive(Clone)]
 pub struct Scene<F, R: Rng> {
     hittables: Vec<BoxedHittable<F, R>>,
     materials: Vec<BoxedMaterial<F, R>>,
@@ -15,13 +16,6 @@ pub struct Scene<F, R: Rng> {
 }
 
 impl<F, R: Rng> Scene<F, R> {
-    pub fn take(&mut self) -> Self {
-        Self {
-            hittables: self.hittables.drain(..).collect(),
-            materials: self.materials.drain(..).collect(),
-            background: self.background.clone(),
-        }
-    }
     pub fn new(background: Vector3<f32>) -> Self {
         Self {
             hittables: Vec::new(),

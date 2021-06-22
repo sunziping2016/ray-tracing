@@ -61,6 +61,8 @@ where
 
 #[pymodule]
 fn v4ray(py: Python, module: &PyModule) -> PyResult<()> {
+    pyo3_asyncio::try_init(py)?;
+
     module.add_class::<PyScene>()?;
     module.add_class::<AABB>()?;
     module.add_class::<PyRay>()?;

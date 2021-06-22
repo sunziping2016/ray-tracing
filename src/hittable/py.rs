@@ -8,6 +8,7 @@ use nalgebra::{SimdBool, UnitVector3, Vector2, Vector3};
 use pyo3::proc_macro::pyclass;
 use pyo3::types::PyModule;
 use pyo3::{Py, PyAny, PyObject, PyResult, Python};
+use std::sync::Arc;
 
 pub struct PyHittable {
     inner: PyObject,
@@ -142,8 +143,8 @@ pub fn py_init_hittable(module: &PyModule) -> PyResult<()> {
 
 pub fn to_hittable(py: Python, item: Py<PyAny>) -> PyBoxedHittable {
     if let Ok(sphere) = item.extract::<Py<Sphere>>(py) {
-        Box::new(sphere) as PyBoxedHittable
+        Arc::new(sphere) as PyBoxedHittable
     } else {
-        Box::new(PyHittable::new(item))
+        Arc::new(PyHittable::new(item))
     }
 }

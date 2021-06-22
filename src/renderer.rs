@@ -12,13 +12,13 @@ use arrayvec::ArrayVec;
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector2, Vector3};
 use num_traits::{cast, clamp, Zero};
-use numpy::{PyArray, PyArray3};
+use numpy::PyArray;
 use pyo3::proc_macro::{pyclass, pymethods};
-use pyo3::Python;
-use rand::{Rng, thread_rng};
+use pyo3::{IntoPy, PyObject, PyResult, Python};
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::{array, iter};
 
 #[pyclass(name = "RendererParam")]
@@ -44,7 +44,7 @@ impl RendererParam {
 
 pub struct Renderer<F, R: Rng> {
     param: RendererParam,
-    camera: Camera<F>,
+    camera: Camera,
     scene: Scene<F, R>,
     bvh: BVH,
 }
@@ -375,34 +375,47 @@ impl<F> RenderResult<F> {
 
 #[pyclass(name = "Renderer")]
 pub struct PyRenderer {
-    inner: Box<Renderer<PySimd, PyRng>>,
+    inner: Arc<Renderer<PySimd, PyRng>>,
 }
 
 #[pymethods]
 impl PyRenderer {
     #[new]
-    fn py_new(param: &RendererParam, camera: &CameraParam, scene: &mut PyScene) -> Self {
+    fn py_new(param: &RendererParam, camera: &CameraParam, scene: &PyScene) -> Self {
         Self {
-            inner: Box::new(Renderer::new(
+            inner: Arc::new(Renderer::new(
                 param.clone(),
                 camera.clone(),
-                scene.inner.take(),
+                scene.inner.clone(),
             )),
         }
     }
     #[name = "render"]
-    fn py_render<'py>(&self, py: Python<'py>) -> &'py PyArray3<f32> {
-        let result = self.inner.render(&mut thread_rng());
+    fn py_render<'py>(&self, py: Python) -> PyResult<PyObject> {
+        let (tx, rx) = async_channel::bounded(1);
+        let inner = self.inner.clone();
         let width = self.inner.param.width as usize;
         let height = self.inner.param.height as usize;
-        let total = width * height;
-        PyArray::from_iter(
-            py,
-            iproduct!(0..total, 0..3).map(|(index, channel)| {
-                result[index / PySimd::LANES][channel].extract(index % PySimd::LANES)
-            }),
-        )
-        .reshape((height, width, 3))
-        .unwrap()
+        rayon::spawn(move || {
+            let result = inner.render(&mut thread_rng());
+            let _ = futures::executor::block_on(
+                tx.send(
+                    iproduct!(0..(height * width), 0..3)
+                        .map(|(index, channel)| {
+                            result[index / PySimd::LANES][channel].extract(index % PySimd::LANES)
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+            );
+        });
+        pyo3_asyncio::async_std::into_coroutine(py, async move {
+            let result = rx.recv().await.unwrap();
+            Ok(Python::with_gil(move |py| {
+                PyArray::from_vec(py, result)
+                    .reshape((height, width, 3))
+                    .unwrap()
+                    .into_py(py)
+            }))
+        })
     }
 }

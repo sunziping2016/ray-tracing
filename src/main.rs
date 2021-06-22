@@ -111,8 +111,8 @@ where
     pub fn create_world<G: Rng>(rng: &mut G) -> Scene<F, R> {
         let mut scene = Scene::new(Vector3::new(1f32, 1f32, 1f32));
         scene.add(
-            Box::new(Sphere::new(Vector3::new(0f32, -1000f32, 0f32), 1000f32)),
-            Box::new(Lambertian::new(Checker::new(
+            Arc::new(Sphere::new(Vector3::new(0f32, -1000f32, 0f32), 1000f32)),
+            Arc::new(Lambertian::new(Checker::new(
                 SolidColor::new(Vector3::new(0.2f32, 0.3f32, 0.1f32)),
                 SolidColor::new(Vector3::new(0.9f32, 0.9f32, 0.9f32)),
             ))),
@@ -127,7 +127,7 @@ where
                 if (center - Vector3::new(4.0f32, 0.2f32, 0f32)).norm() > 0.9 {
                     let choose_mat = rng.gen_range(0f32..=1f32);
                     scene.add(
-                        Box::new(Sphere::new(center, 0.2f32)),
+                        Arc::new(Sphere::new(center, 0.2f32)),
                         if choose_mat < 0.8 {
                             let albedo = Vector3::new(
                                 rng.gen_range(0f32..=1f32),
@@ -135,7 +135,7 @@ where
                                 rng.gen_range(0f32..=1f32),
                             );
                             let albedo = albedo.component_mul(&albedo);
-                            Box::new(Lambertian::new(SolidColor::new(albedo)))
+                            Arc::new(Lambertian::new(SolidColor::new(albedo)))
                         } else if choose_mat < 0.95 {
                             let albedo = Vector3::new(
                                 rng.gen_range(0.5f32..=1f32),
@@ -143,27 +143,27 @@ where
                                 rng.gen_range(0.5f32..=1f32),
                             );
                             let fuzz = rng.gen_range(0f32..=0.5f32);
-                            Box::new(Metal::new(albedo, fuzz))
+                            Arc::new(Metal::new(albedo, fuzz))
                         } else {
-                            Box::new(Dielectric::new(1.5f32))
+                            Arc::new(Dielectric::new(1.5f32))
                         },
                     );
                 }
             }
         }
         scene.add(
-            Box::new(Sphere::new(Vector3::new(0f32, 1f32, 0f32), 1f32)),
-            Box::new(Dielectric::new(1.5f32)),
+            Arc::new(Sphere::new(Vector3::new(0f32, 1f32, 0f32), 1f32)),
+            Arc::new(Dielectric::new(1.5f32)),
         );
         scene.add(
-            Box::new(Sphere::new(Vector3::new(-4f32, 1f32, 0f32), 1f32)),
-            Box::new(Lambertian::new(SolidColor::new(Vector3::new(
+            Arc::new(Sphere::new(Vector3::new(-4f32, 1f32, 0f32), 1f32)),
+            Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
                 0.4f32, 0.2f32, 0.1f32,
             )))),
         );
         scene.add(
-            Box::new(Sphere::new(Vector3::new(4f32, 1f32, 0f32), 1f32)),
-            Box::new(Metal::new(Vector3::new(0.7f32, 0.6f32, 0.5f32), 0.0)),
+            Arc::new(Sphere::new(Vector3::new(4f32, 1f32, 0f32), 1f32)),
+            Arc::new(Metal::new(Vector3::new(0.7f32, 0.6f32, 0.5f32), 0.0)),
         );
         scene
     }
