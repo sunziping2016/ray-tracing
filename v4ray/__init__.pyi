@@ -1,26 +1,12 @@
 from typing import Optional, Awaitable, Tuple
 
 import numpy as np
-from typing_extensions import Protocol
 
+from v4ray_frontend.material import MaterialLike
+from v4ray_frontend.shape import ShapeLike
 from . import shape
 from . import material
 from . import texture
-
-
-class ShapeLike(Protocol):
-    def bounding_box(self) -> AABB: ...
-    def hit(self, ray: Ray, t_min: np.ndarray,
-            t_max: np.ndarray) -> HitRecord: ...
-
-
-class MaterialLike(Protocol):
-    ...
-
-
-class TextureLike(Protocol):
-    ...
-
 
 class Scene:
     def __new__(cls, background: Tuple[float, float, float]) -> Scene: ...

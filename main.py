@@ -15,9 +15,9 @@ from PyQt5.QtWidgets import QMainWindow, QApplication, QTreeWidgetItem, \
 
 import v4ray_frontend
 from ui_mainwindow import Ui_MainWindow
-from v4ray_frontend.texture import Texture
+from v4ray_frontend.texture import TextureType
 from v4ray_frontend.properties import AnyProperty, FloatProperty, ColorProperty
-from v4ray_frontend.shape import Shape
+from v4ray_frontend.shape import ShapeType
 
 T = TypeVar('T')
 
@@ -141,12 +141,12 @@ class State:
     root_objects: List[UUID]
     objects: Dict[UUID, Union[ObjectData, ObjectListData]]
     current_object: Optional[UUID]
-    shape_types: Dict[str, Type[Shape]]
+    shape_types: Dict[str, Type[ShapeType]]
 
     root_texture: List[UUID]
     textures: Dict[UUID, TextureData]
     current_texture: Optional[UUID]
-    texture_types: Dict[str, Type[Texture]]
+    texture_types: Dict[str, Type[TextureType]]
 
     # always rebuild
     object_parent: Dict[UUID, Tuple[Optional[UUID], int]]
@@ -220,7 +220,7 @@ class State:
             widget = widget.child(parents.pop())
         return widget
 
-    def with_more_shapes(self, shapes: Sequence[Type[Shape]]) -> 'State':
+    def with_more_shapes(self, shapes: Sequence[Type[ShapeType]]) -> 'State':
         state = copy.deepcopy(self)
         for shape in shapes:
             kind = shape.kind()
@@ -228,7 +228,7 @@ class State:
             state.shape_types[kind] = shape
         return State(state)
 
-    def with_more_textures(self, textures: Sequence[Type[Texture]]) -> 'State':
+    def with_more_textures(self, textures: Sequence[Type[TextureType]]) -> 'State':
         state = copy.deepcopy(self)
         for texture in textures:
             kind = texture.kind()
@@ -710,8 +710,7 @@ class MainWindow(QMainWindow):
             self.texture_type_changed)
         self.ui.textureName.editingFinished.connect(self.texture_name_changed)
         # resize
-        self.setTabPosition(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea,
-                            QTabWidget.North)
+        self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
         self.tabifyDockWidget(self.ui.dockScene, self.ui.dockTexture)
         self.ui.dockScene.raise_()

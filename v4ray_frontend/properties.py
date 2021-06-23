@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, List, Any, Union
+from typing import Optional, Tuple, Union
+from uuid import UUID
 
 
 @dataclass
@@ -20,7 +21,7 @@ class ColorProperty:
 @dataclass
 class TextureProperty:
     name: str
-    default: Optional[str] = None
+    default: Optional[UUID] = None
 
 
 AnyProperty = Union[

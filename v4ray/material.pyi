@@ -1,4 +1,4 @@
-from v4ray import TextureLike
+from v4ray_frontend.texture import TextureLike
 
 
 class Lambertian:

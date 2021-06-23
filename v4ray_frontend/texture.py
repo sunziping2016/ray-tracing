@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import List, Any
+from typing import List, Any, Protocol
 
 import v4ray
 from v4ray_frontend.properties import AnyProperty, ColorProperty
 
 
-class Texture(ABC):
+class TextureLike(Protocol):
+    ...
+
+
+class TextureType(ABC):
     @staticmethod
     @abstractmethod
     def kind() -> str:
@@ -23,11 +27,11 @@ class Texture(ABC):
 
     @staticmethod
     @abstractmethod
-    def apply(data: List[Any]) -> Any:
+    def apply(data: List[Any]) -> TextureLike:
         pass
 
 
-class SolidColor(Texture):
+class SolidColor(TextureType):
     @staticmethod
     def kind() -> str:
         return 'solid color'
@@ -43,6 +47,5 @@ class SolidColor(Texture):
         return True
 
     @staticmethod
-    def apply(data: List[Any]) -> Any:
-        color = data[0]
-        return v4ray.texture.SolidColor(color)
+    def apply(data: List[Any]) -> TextureLike:
+        return v4ray.texture.SolidColor(data[0])
