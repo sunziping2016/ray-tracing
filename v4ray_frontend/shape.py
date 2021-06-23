@@ -26,6 +26,11 @@ class ShapeType(ABC):
 
     @staticmethod
     @abstractmethod
+    def validate(data: List[Any]) -> bool:
+        pass
+
+    @staticmethod
+    @abstractmethod
     def apply(data: List[Any]) -> List[ShapeLike]:
         pass
 
@@ -43,6 +48,10 @@ class Sphere(ShapeType):
             FloatProperty('坐标 z'),
             FloatProperty('半径'),
         ]
+
+    @staticmethod
+    def validate(data: List[Any]) -> bool:
+        return float(data[3]) > 0
 
     @staticmethod
     def apply(data: List[Any]) -> List[ShapeLike]:

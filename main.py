@@ -243,6 +243,8 @@ class State:
     material_form: Optional[Tuple[str, FormState]]
     valid_textures: Set[UUID]
     valid_materials: Set[UUID]
+    objects_inherited_materials: Dict[UUID, UUID]
+    valid_objects: Set[UUID]
 
     def __init__(
             self,
@@ -289,9 +291,9 @@ class State:
         names = State.calc_unique_name([self.materials[uuid].name
                                         for uuid in self.root_materials])
         self.material_names = dict(zip(self.root_materials, names))
-        names = State.calc_unique_name([self.objects[uuid].name
-                                        for uuid in self.root_objects])
-        self.object_names = dict(zip(self.root_objects, names))
+        names = State.calc_unique_name([o.name for uuid, o
+                                        in self.objects.items()])
+        self.object_names = dict(zip(self.objects.keys(), names))
         self.shape_form = None
         # noinspection PyTypeChecker
         textures: List[Tuple[UUID, str]] = list(self.texture_names.items())
@@ -329,6 +331,30 @@ class State:
                     self.material_types[mat.material[0]].validate(
                         mat.material[1], self.valid_textures):
                 self.valid_materials.add(uuid)
+        self.objects_inherited_materials = {}
+        self.valid_objects = set()
+
+        def object_traversal(uuids: List[UUID],
+                             inherited: Optional[UUID]) -> None:
+            for uuid in uuids:
+                obj = self.objects[uuid]
+                if obj.material is not None and obj.material in self.materials:
+                    new_inherited: Optional[UUID] = obj.material
+                else:
+                    new_inherited = inherited
+                if new_inherited:
+                    self.objects_inherited_materials[obj.key] = new_inherited
+                if isinstance(obj, ObjectListData):
+                    object_traversal(obj.children, new_inherited)
+        object_traversal(self.root_objects, None)
+        for uuid, obj in self.objects.items():
+            if isinstance(obj, ObjectData) and \
+                    obj.name and obj.shape is not None and \
+                    self.shape_types[obj.shape[0]].validate(obj.shape[1]) and \
+                    obj.key in self.objects_inherited_materials and \
+                    self.objects_inherited_materials[obj.key] \
+                    in self.valid_materials:
+                self.valid_objects.add(uuid)
 
     def object_uuid_to_widget(
             self, window: 'MainWindow', uuid: UUID
@@ -526,7 +552,8 @@ class State:
             window.ui.textureRemove, window.ui.textureList,
             window.ui.textureName, window.ui.materialType,
             window.ui.materialType.lineEdit(), window.ui.materialRemove,
-            window.ui.materialList, window.ui.materialName]
+            window.ui.materialList, window.ui.materialName,
+            window.ui.objectMaterialGo, window.ui.objectMaterial.lineEdit()]
         for o in blocks:
             o.blockSignals(True)
         window.ui.objectClearSelection.setEnabled(bool(self.current_object))
@@ -540,13 +567,15 @@ class State:
         window.ui.materialType.clear()
         for item in self.material_types:
             window.ui.materialType.addItem(item)
+        window.ui.objectMaterial.clear()
+        for item in self.material_names.values():
+            window.ui.objectMaterial.addItem(item)
         if not self.current_object:
             window.ui.objectName_.setEnabled(False)
             window.ui.objectName_.setText('')
             window.ui.objectVisible.setEnabled(False)
             window.ui.objectVisible.setChecked(False)
             window.ui.objectMaterial.setEnabled(False)
-            window.ui.objectMaterial.lineEdit().setText('')
             window.ui.objectShape.setEnabled(False)
             window.ui.objectShape.lineEdit().setText('')
             window.ui.objectTree.setCurrentItem(None)  # type: ignore
@@ -557,13 +586,22 @@ class State:
             window.ui.objectVisible.setEnabled(True)
             window.ui.objectVisible.setChecked(obj.visible)
             window.ui.objectMaterial.setEnabled(True)
-            window.ui.objectMaterial.lineEdit().setText('')  # TODO
             window.ui.objectShape.setEnabled(isinstance(obj, ObjectData))
             window.ui.objectShape.lineEdit().setText(
                 '' if isinstance(obj, ObjectListData) or obj.shape is None
                 else obj.shape[0])
             window.ui.objectTree.setCurrentItem(
                 self.object_uuid_to_widget(window, self.current_object))
+        if self.current_object is None or self.objects[self.current_object] \
+                .material not in self.materials:
+            window.ui.objectMaterial.lineEdit().setText('')
+            window.ui.objectMaterialGo.setEnabled(False)
+        else:
+            window.ui.objectMaterial.setEnabled(True)
+            mat_uuid = self.objects[self.current_object].material
+            window.ui.objectMaterial.lineEdit().setText(
+                self.material_names[mat_uuid] if mat_uuid is not None else '')
+            window.ui.objectMaterialGo.setEnabled(True)
         window.ui.textureRemove.setEnabled(bool(self.current_texture))
         if not self.current_texture:
             window.ui.textureType.setEnabled(False)
@@ -619,8 +657,14 @@ class State:
             item: Union[ObjectData, ObjectListData]) -> str:
         name = self.object_names[item.key]
         if isinstance(item, ObjectData):
-            return name + ' ' + ('✓' if item.visible else '✗')
-        return name + '  (组)  ' + ('✓' if item.visible else '✗')
+            name += ' ' + \
+                   ('✓' if item.key in self.valid_objects else '✗')
+        else:
+            name += '  (组)  ' + \
+               ('✓' if item.key in self.valid_objects else '✗')
+        if item.visible:
+            name += ' ' + '👁'
+        return name
 
     def apply_object_tree_item(
             self, item: Union[ObjectData, ObjectListData]) -> QTreeWidgetItem:
@@ -957,6 +1001,10 @@ class MainWindow(QMainWindow):
             lambda state: self.object_visible_changed(state == Qt.Checked))
         self.ui.objectShape.lineEdit().editingFinished.connect(
             self.object_shape_changed)
+        self.ui.objectMaterial.lineEdit().editingFinished.connect(
+            self.object_material_change)
+        self.ui.objectMaterialGo.clicked.connect(
+            lambda _: self.goto_current_material())
         self.ui.textureList.currentItemChanged.connect(
             lambda x, _: self.texture_current_changed(x))
         self.ui.textureAdd.clicked.connect(lambda _: self.texture_add())
@@ -982,6 +1030,13 @@ class MainWindow(QMainWindow):
     def goto_texture(self, uuid: UUID) -> None:
         self.ui.dockTexture.raise_()
         self.set_state(self.state.with_current_texture(uuid))
+
+    def goto_current_material(self) -> None:
+        assert self.state.current_object
+        material = self.state.objects[self.state.current_object].material
+        assert material is not None
+        self.ui.dockMaterial.raise_()
+        self.set_state(self.state.with_current_material(material))
 
     def shape_form_changed(self, index: int, data: Any) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
@@ -1055,6 +1110,24 @@ class MainWindow(QMainWindow):
             obj.shape = None if shape is None else \
                 (shape, [p.default for p in
                          self.state.shape_types[shape].properties()])
+
+        def update_state() -> None:
+            assert self.state.current_object
+            self.set_state(self.state.with_modify_object(
+                self.state.current_object, modify))
+        QTimer.singleShot(0, update_state)
+
+    def object_material_change(self) -> None:
+        text = self.ui.objectMaterial.lineEdit().text()
+        try:
+            uuid: Optional[UUID] = list(self.state.material_names.keys())[
+                list(self.state.material_names.values()).index(text)]
+        except ValueError:
+            uuid = None
+
+        def modify(obj: Union[ObjectData, ObjectListData]) -> None:
+            assert isinstance(obj, ObjectData)
+            obj.material = uuid
 
         def update_state() -> None:
             assert self.state.current_object
