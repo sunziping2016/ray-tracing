@@ -979,7 +979,7 @@ class MainWindow(QMainWindow):
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
 
-    def goto_texture(self, uuid: UUID):
+    def goto_texture(self, uuid: UUID) -> None:
         self.ui.dockTexture.raise_()
         self.set_state(self.state.with_current_texture(uuid))
 

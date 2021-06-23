@@ -386,7 +386,7 @@
      <item>
       <widget class="QGroupBox" name="textureProperties">
        <property name="title">
-        <string>属性</string>
+        <string>质地属性</string>
        </property>
        <layout class="QFormLayout" name="formLayout_3">
         <item row="1" column="0">

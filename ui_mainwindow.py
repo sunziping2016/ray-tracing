@@ -253,7 +253,7 @@ class Ui_MainWindow(object):
         self.dockTexture.setWindowTitle(_translate("MainWindow", "质地"))
         self.textureAdd.setText(_translate("MainWindow", "+"))
         self.textureRemove.setText(_translate("MainWindow", "×"))
-        self.textureProperties.setTitle(_translate("MainWindow", "属性"))
+        self.textureProperties.setTitle(_translate("MainWindow", "质地属性"))
         self.textureTypeLabel.setText(_translate("MainWindow", "类型："))
         self.texturelNameLabel.setText(_translate("MainWindow", "名字："))
         self.dockCamera.setWindowTitle(_translate("MainWindow", "相机"))
