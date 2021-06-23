@@ -2,6 +2,7 @@ from typing import Optional, Awaitable, Tuple
 
 import numpy as np
 
+from v4ray_frontend.camera import CameraLike
 from v4ray_frontend.material import MaterialLike
 from v4ray_frontend.shape import ShapeLike
 from . import shape
@@ -44,7 +45,7 @@ class HitRecord:
     ...
 
 
-class CameraParam:
+class PerspectiveCameraParam(CameraLike):
     def __new__(
             cls,
             look_from: Tuple[float, float, float],
@@ -56,7 +57,7 @@ class CameraParam:
             focus_dist: Optional[float] = None,
             time0: Optional[float] = None,
             time1: Optional[float] = None,
-    ) -> CameraParam: ...
+    ) -> PerspectiveCameraParam: ...
 
 
 class RendererParam:
@@ -72,7 +73,7 @@ class Renderer:
     def __new__(
             cls,
             param: RendererParam,
-            camera: CameraParam,
+            camera: CameraLike,
             scene: Scene,
     ) -> Renderer: ...
     # ... -> [f32; height x width x 3]

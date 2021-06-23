@@ -9,7 +9,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::f32::consts;
 
-#[pyclass(name = "CameraParam")]
+#[pyclass(name = "PerspectiveCameraParam")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CameraParam {
     pub look_from: Vector3<f32>,

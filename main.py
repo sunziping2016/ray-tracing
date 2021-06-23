@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 import numpy as np
 from PyQt5.QtCore import Qt, QObject, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QResizeEvent, QGuiApplication, \
-    QDoubleValidator, QColor
+    QDoubleValidator, QColor, QIntValidator
 from PyQt5.QtWidgets import QMainWindow, QApplication, QTreeWidgetItem, \
     QLayoutItem, QLabel, QLineEdit, QFormLayout, QWidgetItem, QLayout, \
     QListWidgetItem, QPushButton, QHBoxLayout, QColorDialog, QTabWidget, \
@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import QMainWindow, QApplication, QTreeWidgetItem, \
 
 import v4ray_frontend
 from ui_mainwindow import Ui_MainWindow
+from v4ray_frontend.camera import CameraType
 from v4ray_frontend.material import MaterialType
 from v4ray_frontend.texture import TextureType
 from v4ray_frontend.properties import AnyProperty, FloatProperty, \
@@ -56,6 +57,13 @@ class MaterialData:
     key: UUID = field(default_factory=uuid4, init=False)
     name: str
     material: Optional[Tuple[str, List[Any]]]
+
+
+@dataclass
+class RendererData:
+    width: int
+    height: int
+    max_depth: int
 
 
 class FormState:
@@ -233,6 +241,11 @@ class State:
     current_material: Optional[UUID]
     material_types: Dict[str, Type[MaterialType]]
 
+    camera: Optional[Tuple[str, List[Any]]]
+    camera_types: Dict[str, Type[CameraType]]
+
+    renderer: RendererData
+
     # always rebuild
     object_parent: Dict[UUID, Tuple[Optional[UUID], int]]
     object_names: Dict[UUID, str]
@@ -241,10 +254,12 @@ class State:
     shape_form: Optional[Tuple[str, FormState]]
     texture_form: Optional[Tuple[str, FormState]]
     material_form: Optional[Tuple[str, FormState]]
+    camera_form: Optional[Tuple[str, FormState]]
     valid_textures: Set[UUID]
     valid_materials: Set[UUID]
     objects_inherited_materials: Dict[UUID, UUID]
     valid_objects: Set[UUID]
+    camera_valid: bool
 
     def __init__(
             self,
@@ -265,6 +280,9 @@ class State:
             self.materials = {}
             self.current_material = None
             self.material_types = {}
+            self.camera = None
+            self.camera_types = {}
+            self.renderer = RendererData(width=800, height=600, max_depth=20)
         else:
             self.render_result = prev_state.render_result
             self.root_objects = prev_state.root_objects
@@ -280,6 +298,9 @@ class State:
             self.materials = prev_state.materials
             self.current_material = prev_state.current_material
             self.material_types = prev_state.material_types
+            self.camera = prev_state.camera
+            self.camera_types = prev_state.camera_types
+            self.renderer = prev_state.renderer
         self.object_parent = {c: (k, i) for k, obj in self.objects.items()
                               if isinstance(obj, ObjectListData)
                               for i, c in enumerate(obj.children)}
@@ -319,6 +340,11 @@ class State:
                 self.material_form = mat_name, FormState(
                     properties=self.material_types[mat_name].properties(),
                     values=mat.material[1], textures=textures)
+        self.camera_form = None
+        if self.camera is not None:
+            self.camera_form = self.camera[0], FormState(
+                properties=self.camera_types[self.camera[0]].properties(),
+                values=self.camera[1], textures=textures)
         self.valid_textures = set()
         for uuid, texture in self.textures.items():
             if texture.name and texture.texture is not None and \
@@ -355,6 +381,10 @@ class State:
                     self.objects_inherited_materials[obj.key] \
                     in self.valid_materials:
                 self.valid_objects.add(uuid)
+        self.camera_valid = False
+        if self.camera is not None and self.camera_types[self.camera[0]] \
+                .validate(self.camera[1]):
+            self.camera_valid = True
 
     def object_uuid_to_widget(
             self, window: 'MainWindow', uuid: UUID
@@ -395,6 +425,14 @@ class State:
             state.material_types[kind] = material
         return State(state)
 
+    def with_more_cameras(self, cameras: Sequence[Type[CameraType]]) -> 'State':
+        state = copy.deepcopy(self)
+        for camera in cameras:
+            kind = camera.kind()
+            assert kind not in self.camera_types
+            state.camera_types[kind] = camera
+        return State(state)
+
     def with_modify_object(
             self, uuid: UUID,
             op: Callable[[Union[ObjectData, ObjectListData]], Any]) -> 'State':
@@ -412,6 +450,19 @@ class State:
             self, uuid: UUID, op: Callable[[MaterialData], Any]) -> 'State':
         state = copy.deepcopy(self)
         op(state.materials[uuid])
+        return State(state)
+
+    def with_modify_camera(
+            self, op: Callable[[Optional[Tuple[str, List[Any]]]],
+                               Optional[Tuple[str, List[Any]]]]) -> 'State':
+        state = copy.deepcopy(self)
+        state.camera = op(state.camera)
+        return State(state)
+
+    def with_modify_renderer(
+            self, op: Callable[[RendererData], None]) -> 'State':
+        state = copy.deepcopy(self)
+        op(state.renderer)
         return State(state)
 
     def with_current_object(self, uuid: Optional[UUID]) -> 'State':
@@ -553,7 +604,10 @@ class State:
             window.ui.textureName, window.ui.materialType,
             window.ui.materialType.lineEdit(), window.ui.materialRemove,
             window.ui.materialList, window.ui.materialName,
-            window.ui.objectMaterialGo, window.ui.objectMaterial.lineEdit()]
+            window.ui.objectMaterialGo, window.ui.objectMaterial.lineEdit(),
+            window.ui.cameraType, window.ui.cameraType.lineEdit(),
+            window.ui.renderWidth, window.ui.renderHeight,
+            window.ui.renderMaxDepth]
         for o in blocks:
             o.blockSignals(True)
         window.ui.objectClearSelection.setEnabled(bool(self.current_object))
@@ -570,6 +624,9 @@ class State:
         window.ui.objectMaterial.clear()
         for item in self.material_names.values():
             window.ui.objectMaterial.addItem(item)
+        window.ui.cameraType.clear()
+        for item in self.camera_types:
+            window.ui.cameraType.addItem(item)
         if not self.current_object:
             window.ui.objectName_.setEnabled(False)
             window.ui.objectName_.setText('')
@@ -636,6 +693,13 @@ class State:
                     self.current_material)))
             window.ui.materialName.setEnabled(True)
             window.ui.materialName.setText(mat.name)
+        window.ui.cameraType.lineEdit().setText(
+            '' if self.camera is None else self.camera[0])
+        window.ui.cameraProperties.setTitle('相机属性 ' +
+                                            ('✓' if self.camera_valid else '✗'))
+        window.ui.renderWidth.setText(str(self.renderer.width))
+        window.ui.renderHeight.setText(str(self.renderer.height))
+        window.ui.renderMaxDepth.setText(str(self.renderer.max_depth))
         for o in blocks:
             o.blockSignals(False)
 
@@ -660,8 +724,7 @@ class State:
             name += ' ' + \
                    ('✓' if item.key in self.valid_objects else '✗')
         else:
-            name += '  (组)  ' + \
-               ('✓' if item.key in self.valid_objects else '✗')
+            name += ' (组)'
         if item.visible:
             name += ' ' + '👁'
         return name
@@ -841,6 +904,11 @@ class State:
             self.material_form,
             window.material_form_changed,
             window)
+        State.apply_form(
+            window.ui.cameraProperties.layout(), 1,
+            self.camera_form,
+            window.camera_form_changed,
+            window)
         self.apply_always(window)
 
     @staticmethod
@@ -953,6 +1021,10 @@ class State:
             window.ui.materialProperties.layout(), 2,
             prev_state.material_form, self.material_form,
             window.material_form_changed, window)
+        State.apply_diff_form(
+            window.ui.cameraProperties.layout(), 1,
+            prev_state.camera_form, self.camera_form,
+            window.camera_form_changed, window)
         for o in blocks:
             o.blockSignals(False)
         self.apply_always(window)
@@ -970,7 +1042,8 @@ class MainWindow(QMainWindow):
         self.state = State() \
             .with_more_shapes(v4ray_frontend.shapes) \
             .with_more_textures(v4ray_frontend.textures) \
-            .with_more_materials(v4ray_frontend.materials)
+            .with_more_materials(v4ray_frontend.materials) \
+            .with_more_cameras(v4ray_frontend.cameras)
 
         self.state.apply(self)
         # signals
@@ -985,7 +1058,9 @@ class MainWindow(QMainWindow):
                     self.ui.image.height(),
                     Qt.KeepAspectRatio
                 ))
-
+        self.ui.renderWidth.setValidator(QIntValidator(1, 3840))
+        self.ui.renderHeight.setValidator(QIntValidator(1, 2160))
+        self.ui.renderMaxDepth.setValidator(QIntValidator(1, 1000))
         self.ui.image.resizeEvent = handle_resize_event  # type: ignore
         self.ui.objectAddGroup.clicked.connect(
             lambda _: self.object_add(True))
@@ -1019,6 +1094,13 @@ class MainWindow(QMainWindow):
         self.ui.materialType.lineEdit().editingFinished.connect(
             self.material_type_changed)
         self.ui.materialName.editingFinished.connect(self.material_name_changed)
+        self.ui.cameraType.lineEdit().editingFinished.connect(
+            self.camera_type_changed)
+        self.ui.renderWidth.editingFinished.connect(self.renderer_width_changed)
+        self.ui.renderHeight.editingFinished.connect(
+            self.renderer_height_changed)
+        self.ui.renderMaxDepth.editingFinished.connect(
+            self.renderer_max_depth_changed)
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
@@ -1026,6 +1108,21 @@ class MainWindow(QMainWindow):
         self.ui.dockScene.raise_()
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
+
+    def renderer_width_changed(self):
+        def modify(renderer: RendererData) -> None:
+            renderer.width = int(self.ui.renderWidth.text())
+        self.set_state(self.state.with_modify_renderer(modify))
+
+    def renderer_height_changed(self):
+        def modify(renderer: RendererData) -> None:
+            renderer.height = int(self.ui.renderHeight.text())
+        self.set_state(self.state.with_modify_renderer(modify))
+
+    def renderer_max_depth_changed(self):
+        def modify(renderer: RendererData) -> None:
+            renderer.max_depth = int(self.ui.renderMaxDepth.text())
+        self.set_state(self.state.with_modify_renderer(modify))
 
     def goto_texture(self, uuid: UUID) -> None:
         self.ui.dockTexture.raise_()
@@ -1067,6 +1164,15 @@ class MainWindow(QMainWindow):
         assert self.state.current_material
         self.set_state(self.state.with_modify_material(
             self.state.current_material, modify))
+
+    def camera_form_changed(self, index: int, data: Any) -> None:
+        def modify(
+                camera: Optional[Tuple[str, List[Any]]]
+        ) -> Optional[Tuple[str, List[Any]]]:
+            assert camera is not None
+            camera[1][index] = data
+            return camera
+        self.set_state(self.state.with_modify_camera(modify))
 
     def object_add(self, group: bool) -> None:
         self.set_state(self.state.with_add_object(group=group))
@@ -1175,6 +1281,26 @@ class MainWindow(QMainWindow):
             assert self.state.current_material
             self.set_state(self.state.with_modify_material(
                 self.state.current_material, modify))
+        QTimer.singleShot(0, update_state)
+
+    def camera_type_changed(self) -> None:
+        text = self.ui.cameraType.lineEdit().text()
+        current_camera = '' if self.state.camera is None else \
+            self.state.camera[0]
+        if current_camera == text:
+            return
+        camera = None if not text or text not in self.state.camera_types \
+            else text
+
+        def modify(
+                _camera: Optional[Tuple[str, List[Any]]]
+        ) -> Optional[Tuple[str, List[Any]]]:
+            return None if camera is None else \
+                (camera, [p.default for p in
+                          self.state.camera_types[camera].properties()])
+
+        def update_state() -> None:
+            self.set_state(self.state.with_modify_camera(modify))
         QTimer.singleShot(0, update_state)
 
     def object_name_changed(self) -> None:

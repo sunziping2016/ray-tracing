@@ -445,20 +445,100 @@
    </attribute>
    <widget class="QWidget" name="contentCamera">
     <layout class="QVBoxLayout" name="verticalLayout_4">
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
      <item>
-      <widget class="QGroupBox" name="cameraProperties">
-       <property name="title">
-        <string>相机属性</string>
+      <widget class="QScrollArea" name="cameraScrollArea">
+       <property name="frameShape">
+        <enum>QFrame::NoFrame</enum>
        </property>
-       <layout class="QFormLayout" name="formLayout_4"/>
-      </widget>
-     </item>
-     <item>
-      <widget class="QGroupBox" name="rendererProperties">
-       <property name="title">
-        <string>渲染属性</string>
+       <property name="widgetResizable">
+        <bool>true</bool>
        </property>
-       <layout class="QFormLayout" name="formLayout_5"/>
+       <widget class="QWidget" name="scrollAreaWidgetContents">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>274</width>
+          <height>612</height>
+         </rect>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_6">
+         <item>
+          <widget class="QGroupBox" name="cameraProperties">
+           <property name="title">
+            <string>相机属性</string>
+           </property>
+           <layout class="QFormLayout" name="formLayout_4">
+            <item row="0" column="0">
+             <widget class="QLabel" name="cameraTypeLabel">
+              <property name="text">
+               <string>类型：</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QComboBox" name="cameraType">
+              <property name="editable">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="rendererProperties">
+           <property name="title">
+            <string>渲染属性</string>
+           </property>
+           <layout class="QFormLayout" name="formLayout_5">
+            <item row="0" column="0">
+             <widget class="QLabel" name="renderMaxDepthLabel">
+              <property name="text">
+               <string>高度：</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="renderWidth"/>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="renderWidthLabel">
+              <property name="text">
+               <string>宽度：</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="renderHeight"/>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="renderHeightLabel">
+              <property name="text">
+               <string>最大深度：</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLineEdit" name="renderMaxDepth"/>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
       </widget>
      </item>
     </layout>

@@ -1,5 +1,5 @@
---- raw_ui_mainwindow.py	2021-06-24 00:50:08.320733490 +0800
-+++ ui_mainwindow.py	2021-06-24 00:50:09.400752847 +0800
+--- raw_ui_mainwindow.py	2021-06-24 02:46:50.720494220 +0800
++++ ui_mainwindow.py	2021-06-24 02:46:51.940490948 +0800
 @@ -9,10 +9,11 @@
  
  
@@ -13,7 +13,7 @@
          MainWindow.setObjectName("MainWindow")
          MainWindow.resize(1130, 914)
          self.centralwidget = QtWidgets.QWidget(MainWindow)
-@@ -237,7 +238,7 @@
+@@ -274,7 +275,7 @@
          self.retranslateUi(MainWindow)
          QtCore.QMetaObject.connectSlotsByName(MainWindow)
  
