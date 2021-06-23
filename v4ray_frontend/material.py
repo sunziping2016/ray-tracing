@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import List, Any, Dict, Protocol
+from typing import List, Any, Dict, Protocol, Set
 from uuid import UUID
 
-import v4ray.material
+import v4ray
 from v4ray_frontend.properties import AnyProperty, TextureProperty
 from v4ray_frontend.texture import TextureLike
 
@@ -24,7 +24,7 @@ class MaterialType(ABC):
 
     @staticmethod
     @abstractmethod
-    def validate(data: List[Any]) -> bool:
+    def validate(data: List[Any], valid_textures: Set[UUID]) -> bool:
         pass
 
     @staticmethod
@@ -52,8 +52,8 @@ class Lambertian(MaterialType):
         ]
 
     @staticmethod
-    def validate(data: List[Any]) -> bool:
-        return data[0] is not None
+    def validate(data: List[Any], valid_textures: Set[UUID]) -> bool:
+        return data[0] is not None and data[0] in valid_textures
 
     @staticmethod
     def apply_preview(data: List[Any],

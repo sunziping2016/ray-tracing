@@ -26,7 +26,7 @@ class ShapeType(ABC):
 
     @staticmethod
     @abstractmethod
-    def apply(data: List[Any]) -> ShapeLike:
+    def apply(data: List[Any]) -> List[ShapeLike]:
         pass
 
 
@@ -45,11 +45,11 @@ class Sphere(ShapeType):
         ]
 
     @staticmethod
-    def apply(data: List[Any]) -> ShapeLike:
+    def apply(data: List[Any]) -> List[ShapeLike]:
         x = data[0]
         y = data[1]
         z = data[2]
         radius = data[3]
         assert isinstance(x, float) and isinstance(y, float) and \
                isinstance(z, float) and isinstance(radius, float)
-        return v4ray.shape.Sphere((x, y, z), radius)
+        return [v4ray.shape.Sphere((x, y, z), radius)]

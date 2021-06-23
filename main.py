@@ -1,5 +1,6 @@
 import copy
 import sys
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Optional, Union, List, Dict, TypeVar, Any, Tuple, \
     Type, Sequence, Callable, Set
@@ -8,15 +9,18 @@ from uuid import UUID, uuid4
 import numpy as np
 from PyQt5.QtCore import Qt, QObject, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QResizeEvent, QGuiApplication, \
-    QDoubleValidator, QPalette, QColor
+    QDoubleValidator, QColor
 from PyQt5.QtWidgets import QMainWindow, QApplication, QTreeWidgetItem, \
     QLayoutItem, QLabel, QLineEdit, QFormLayout, QWidgetItem, QLayout, \
-    QListWidgetItem, QPushButton, QHBoxLayout, QColorDialog, QTabWidget
+    QListWidgetItem, QPushButton, QHBoxLayout, QColorDialog, QTabWidget, \
+    QComboBox
 
 import v4ray_frontend
 from ui_mainwindow import Ui_MainWindow
+from v4ray_frontend.material import MaterialType
 from v4ray_frontend.texture import TextureType
-from v4ray_frontend.properties import AnyProperty, FloatProperty, ColorProperty
+from v4ray_frontend.properties import AnyProperty, FloatProperty, \
+    ColorProperty, TextureProperty
 from v4ray_frontend.shape import ShapeType
 
 T = TypeVar('T')
@@ -47,21 +51,42 @@ class TextureData:
     texture: Optional[Tuple[str, List[Any]]]
 
 
+@dataclass
+class MaterialData:
+    key: UUID = field(default_factory=uuid4, init=False)
+    name: str
+    material: Optional[Tuple[str, List[Any]]]
+
+
 class FormState:
     properties: List[AnyProperty]
     values: List[Any]
+    textures: List[Tuple[UUID, str]]
+
+    def on_texture_finished(self, combo: QComboBox, index: int,
+                            on_new_state: Callable[[int, Any], None]) -> None:
+        text = combo.lineEdit().text()
+        try:
+            i = [t for _, t in self.textures].index(text)
+            on_new_state(index, self.textures[i][0])
+        except ValueError:
+            on_new_state(index, None)
 
     def __init__(self, properties: List[AnyProperty],
-                 values: Optional[List[Any]] = None):
+                 values: Optional[List[Any]],
+                 textures: List[Tuple[UUID, str]]):
         self.properties = properties
         self.values = values if values is not None else \
             [p.default for p in properties]
+        self.textures = textures
 
     def data(self) -> List[Any]:
         return self.values
 
     def apply(
-            self, on_new_state: Callable[[int, Any], None], parent: 'MainWindow'
+            self,
+            on_new_state: Callable[[int, Any], None],
+            parent: 'MainWindow'
     ) -> List[Tuple[Any, Any]]:
         # noinspection PyTypeChecker
         widgets: List[Tuple[Any, Any]] = []
@@ -85,6 +110,7 @@ class FormState:
             elif isinstance(p, ColorProperty):
                 layout = QHBoxLayout()
                 button = QPushButton()
+                button.setFixedSize(QSize(46, 23))
                 color = QColor(v[0], v[1], v[2])
                 button.setStyleSheet(f'QPushButton:enabled '
                                      f'{{ background-color: {color.name()}; }}')
@@ -98,8 +124,33 @@ class FormState:
                 layout.addWidget(button)
                 layout.addStretch(1)
                 widgets.append((label, layout))
-            else:
-                assert False
+            elif isinstance(p, TextureProperty):
+                layout = QHBoxLayout()
+                combo = QComboBox()
+                for _, text in self.textures:
+                    combo.addItem(text)
+                combo.setEditable(True)
+                go = QPushButton('Go')
+                go.setFixedSize(QSize(46, 23))
+                if v is not None:
+                    try:
+                        index = [t for t, _ in self.textures].index(v)
+                        combo.lineEdit().setText(self.textures[index][1])
+                        go.clicked.connect(lambda _, v=v:
+                                           parent.goto_texture(v))
+                        go.setEnabled(True)
+                    except ValueError:
+                        combo.lineEdit().setText('')
+                        go.setEnabled(False)
+                else:
+                    combo.lineEdit().setText('')
+                    go.setEnabled(False)
+                combo.lineEdit().editingFinished.connect(
+                    lambda combo=combo, go=go, i=i:
+                    self.on_texture_finished(combo, i, on_new_state))
+                layout.addWidget(combo)
+                layout.addWidget(go)
+                widgets.append((label, layout))
         return widgets
 
     def apply_diff(self, _prev: 'FormState',
@@ -131,8 +182,37 @@ class FormState:
                     on_new_state(i, (c.red(), c.green(), c.blue()))
                 button.clicked.disconnect()
                 button.clicked.connect(lambda x: color_picker())
-            else:
-                assert False
+            elif isinstance(p, TextureProperty):
+                assert isinstance(f, QHBoxLayout)
+                f_item1, f_item2 = f.itemAt(0), f.itemAt(1)
+                assert isinstance(f_item1, QWidgetItem) \
+                       and isinstance(f_item2, QWidgetItem)
+                combo = f_item1.widget()
+                go = f_item2.widget()
+                combo.clear()
+                for _, text in self.textures:
+                    combo.addItem(text)
+                combo.lineEdit().editingFinished.disconnect()
+                try:
+                    go.clicked.disconnect()
+                except TypeError:
+                    pass
+                if v is not None:
+                    try:
+                        index = [t for t, _ in self.textures].index(v)
+                        combo.lineEdit().setText(self.textures[index][1])
+                        go.clicked.connect(lambda _, v=v:
+                                           parent.goto_texture(v))
+                        go.setEnabled(True)
+                    except ValueError:
+                        combo.lineEdit().setText('')
+                        go.setEnabled(False)
+                else:
+                    combo.lineEdit().setText('')
+                    go.setEnabled(False)
+                combo.lineEdit().editingFinished.connect(
+                    lambda combo=combo, go=go, i=i:
+                    self.on_texture_finished(combo, i, on_new_state))
 
 
 class State:
@@ -143,16 +223,26 @@ class State:
     current_object: Optional[UUID]
     shape_types: Dict[str, Type[ShapeType]]
 
-    root_texture: List[UUID]
+    root_textures: List[UUID]
     textures: Dict[UUID, TextureData]
     current_texture: Optional[UUID]
     texture_types: Dict[str, Type[TextureType]]
 
+    root_materials: List[UUID]
+    materials: Dict[UUID, MaterialData]
+    current_material: Optional[UUID]
+    material_types: Dict[str, Type[MaterialType]]
+
     # always rebuild
     object_parent: Dict[UUID, Tuple[Optional[UUID], int]]
+    object_names: Dict[UUID, str]
+    texture_names: Dict[UUID, str]
+    material_names: Dict[UUID, str]
     shape_form: Optional[Tuple[str, FormState]]
     texture_form: Optional[Tuple[str, FormState]]
+    material_form: Optional[Tuple[str, FormState]]
     valid_textures: Set[UUID]
+    valid_materials: Set[UUID]
 
     def __init__(
             self,
@@ -165,10 +255,14 @@ class State:
             self.current_object = None
             self.shape_types = {}
             self.shape_form = None
-            self.root_texture = []
+            self.root_textures = []
             self.textures = {}
             self.current_texture = None
             self.texture_types = {}
+            self.root_materials = []
+            self.materials = {}
+            self.current_material = None
+            self.material_types = {}
         else:
             self.render_result = prev_state.render_result
             self.root_objects = prev_state.root_objects
@@ -176,22 +270,37 @@ class State:
             self.current_object = prev_state.current_object
             self.shape_types = prev_state.shape_types
             self.shape_form = prev_state.shape_form
-            self.root_texture = prev_state.root_texture
+            self.root_textures = prev_state.root_textures
             self.textures = prev_state.textures
             self.current_texture = prev_state.current_texture
             self.texture_types = prev_state.texture_types
+            self.root_materials = prev_state.root_materials
+            self.materials = prev_state.materials
+            self.current_material = prev_state.current_material
+            self.material_types = prev_state.material_types
         self.object_parent = {c: (k, i) for k, obj in self.objects.items()
                               if isinstance(obj, ObjectListData)
                               for i, c in enumerate(obj.children)}
         for i, k in enumerate(self.root_objects):
             self.object_parent[k] = None, i
+        names = State.calc_unique_name([self.textures[uuid].name
+                                        for uuid in self.root_textures])
+        self.texture_names = dict(zip(self.root_textures, names))
+        names = State.calc_unique_name([self.materials[uuid].name
+                                        for uuid in self.root_materials])
+        self.material_names = dict(zip(self.root_materials, names))
+        names = State.calc_unique_name([self.objects[uuid].name
+                                        for uuid in self.root_objects])
+        self.object_names = dict(zip(self.root_objects, names))
         self.shape_form = None
+        # noinspection PyTypeChecker
+        textures: List[Tuple[UUID, str]] = list(self.texture_names.items())
         if self.current_object is not None:
             obj = self.objects[self.current_object]
             if isinstance(obj, ObjectData) and obj.shape is not None:
                 self.shape_form = obj.shape[0], FormState(
                     properties=self.shape_types[obj.shape[0]].properties(),
-                    values=obj.shape[1])
+                    values=obj.shape[1], textures=textures)
         self.texture_form = None
         if self.current_texture is not None:
             texture = self.textures[self.current_texture]
@@ -199,13 +308,27 @@ class State:
                 texture_name = texture.texture[0]
                 self.texture_form = texture_name, FormState(
                     properties=self.texture_types[texture_name].properties(),
-                    values=texture.texture[1])
+                    values=texture.texture[1], textures=textures)
+        self.material_form = None
+        if self.current_material is not None:
+            mat = self.materials[self.current_material]
+            if mat.material is not None:
+                mat_name = mat.material[0]
+                self.material_form = mat_name, FormState(
+                    properties=self.material_types[mat_name].properties(),
+                    values=mat.material[1], textures=textures)
         self.valid_textures = set()
         for uuid, texture in self.textures.items():
             if texture.name and texture.texture is not None and \
                     self.texture_types[texture.texture[0]].validate(
                         texture.texture[1]):
                 self.valid_textures.add(uuid)
+        self.valid_materials = set()
+        for uuid, mat in self.materials.items():
+            if mat.name and mat.material is not None and \
+                    self.material_types[mat.material[0]].validate(
+                        mat.material[1], self.valid_textures):
+                self.valid_materials.add(uuid)
 
     def object_uuid_to_widget(
             self, window: 'MainWindow', uuid: UUID
@@ -228,12 +351,22 @@ class State:
             state.shape_types[kind] = shape
         return State(state)
 
-    def with_more_textures(self, textures: Sequence[Type[TextureType]]) -> 'State':
+    def with_more_textures(self,
+                           textures: Sequence[Type[TextureType]]) -> 'State':
         state = copy.deepcopy(self)
         for texture in textures:
             kind = texture.kind()
             assert kind not in self.texture_types
             state.texture_types[kind] = texture
+        return State(state)
+
+    def with_more_materials(self,
+                            materials: Sequence[Type[MaterialType]]) -> 'State':
+        state = copy.deepcopy(self)
+        for material in materials:
+            kind = material.kind()
+            assert kind not in self.material_types
+            state.material_types[kind] = material
         return State(state)
 
     def with_modify_object(
@@ -249,6 +382,12 @@ class State:
         op(state.textures[uuid])
         return State(state)
 
+    def with_modify_material(
+            self, uuid: UUID, op: Callable[[MaterialData], Any]) -> 'State':
+        state = copy.deepcopy(self)
+        op(state.materials[uuid])
+        return State(state)
+
     def with_current_object(self, uuid: Optional[UUID]) -> 'State':
         state = copy.deepcopy(self)
         state.current_object = uuid
@@ -257,6 +396,11 @@ class State:
     def with_current_texture(self, uuid: Optional[UUID]) -> 'State':
         state = copy.deepcopy(self)
         state.current_texture = uuid
+        return State(state)
+
+    def with_current_material(self, uuid: Optional[UUID]) -> 'State':
+        state = copy.deepcopy(self)
+        state.current_material = uuid
         return State(state)
 
     def with_remove_object(self, uuid: UUID) -> 'State':
@@ -290,13 +434,29 @@ class State:
     def with_remove_texture(self, uuid: UUID) -> 'State':
         state = copy.deepcopy(self)
         del state.textures[uuid]
-        index = state.root_texture.index(uuid)
-        state.root_texture.remove(uuid)
+        index = state.root_textures.index(uuid)
+        state.root_textures.remove(uuid)
         if state.current_texture == uuid:
-            if index < len(state.root_texture):
-                state.current_texture = state.root_texture[index]
+            if index == len(state.root_textures):
+                index -= 1
+            if index >= 0:
+                state.current_texture = state.root_textures[index]
             else:
                 state.current_texture = None
+        return State(state)
+
+    def with_remove_material(self, uuid: UUID) -> 'State':
+        state = copy.deepcopy(self)
+        del state.materials[uuid]
+        index = state.root_materials.index(uuid)
+        state.root_materials.remove(uuid)
+        if state.current_material == uuid:
+            if index == len(state.root_materials):
+                index -= 1
+            if index >= 0:
+                state.current_material = state.root_materials[index]
+            else:
+                state.current_material = None
         return State(state)
 
     def with_add_object(self, name: Optional[str] = None,
@@ -336,11 +496,24 @@ class State:
         item = TextureData(name=name or '', texture=None)
         state.textures[item.key] = item
         if state.current_texture is None:
-            state.root_texture.append(item.key)
+            state.root_textures.append(item.key)
         else:
-            state.root_texture.insert(
-                state.root_texture.index(state.current_texture) + 1, item.key)
+            state.root_textures.insert(
+                state.root_textures.index(state.current_texture) + 1, item.key)
         state.current_texture = item.key
+        return State(state)
+
+    def with_add_material(self, name: Optional[str] = None) -> 'State':
+        state = copy.deepcopy(self)
+        item = MaterialData(name=name or '', material=None)
+        state.materials[item.key] = item
+        if state.current_material is None:
+            state.root_materials.append(item.key)
+        else:
+            state.root_materials.insert(
+                state.root_materials.index(state.current_material) + 1,
+                item.key)
+        state.current_material = item.key
         return State(state)
 
     def apply_always(self, window: 'MainWindow') -> None:
@@ -351,17 +524,22 @@ class State:
             window.ui.objectShape, window.ui.textureType,
             window.ui.objectShape.lineEdit(), window.ui.textureType.lineEdit(),
             window.ui.textureRemove, window.ui.textureList,
-            window.ui.textureName]
+            window.ui.textureName, window.ui.materialType,
+            window.ui.materialType.lineEdit(), window.ui.materialRemove,
+            window.ui.materialList, window.ui.materialName]
         for o in blocks:
             o.blockSignals(True)
         window.ui.objectClearSelection.setEnabled(bool(self.current_object))
         window.ui.objectRemove.setEnabled(bool(self.current_object))
         window.ui.objectShape.clear()
-        for shape in self.shape_types:
-            window.ui.objectShape.addItem(shape)
+        for item in self.shape_types:
+            window.ui.objectShape.addItem(item)
         window.ui.textureType.clear()
-        for text in self.texture_types:
-            window.ui.textureType.addItem(text)
+        for item in self.texture_types:
+            window.ui.textureType.addItem(item)
+        window.ui.materialType.clear()
+        for item in self.material_types:
+            window.ui.materialType.addItem(item)
         if not self.current_object:
             window.ui.objectName_.setEnabled(False)
             window.ui.objectName_.setText('')
@@ -394,15 +572,32 @@ class State:
             window.ui.textureName.setEnabled(False)
             window.ui.textureName.setText('')
         else:
-            text2 = self.textures[self.current_texture]
+            text = self.textures[self.current_texture]
             window.ui.textureType.setEnabled(True)
             window.ui.textureType.lineEdit().setText(
-                '' if text2.texture is None else text2.texture[0])
+                '' if text.texture is None else text.texture[0])
             window.ui.textureList.setCurrentItem(
-                window.ui.textureList.item(self.root_texture.index(
+                window.ui.textureList.item(self.root_textures.index(
                     self.current_texture)))
             window.ui.textureName.setEnabled(True)
-            window.ui.textureName.setText(text2.name)
+            window.ui.textureName.setText(text.name)
+        window.ui.materialRemove.setEnabled(bool(self.current_material))
+        if not self.current_material:
+            window.ui.materialType.setEnabled(False)
+            window.ui.materialType.lineEdit().setText('')
+            window.ui.materialList.setCurrentItem(None)   # type: ignore
+            window.ui.materialName.setEnabled(False)
+            window.ui.materialName.setText('')
+        else:
+            mat = self.materials[self.current_material]
+            window.ui.materialType.setEnabled(True)
+            window.ui.materialType.lineEdit().setText(
+                '' if mat.material is None else mat.material[0])
+            window.ui.materialList.setCurrentItem(
+                window.ui.materialList.item(self.root_materials.index(
+                    self.current_material)))
+            window.ui.materialName.setEnabled(True)
+            window.ui.materialName.setText(mat.name)
         for o in blocks:
             o.blockSignals(False)
 
@@ -419,17 +614,17 @@ class State:
         else:
             window.ui.image.clear()
 
-    @staticmethod
     def apply_object_tree_item_text(
+            self,
             item: Union[ObjectData, ObjectListData]) -> str:
+        name = self.object_names[item.key]
         if isinstance(item, ObjectData):
-            return (item.name or '未命名') + ' ' + ('✓' if item.visible else '✗')
-        return (item.name or '未命名') + '  (组)  ' + \
-               ('✓' if item.visible else '✗')
+            return name + ' ' + ('✓' if item.visible else '✗')
+        return name + '  (组)  ' + ('✓' if item.visible else '✗')
 
     def apply_object_tree_item(
             self, item: Union[ObjectData, ObjectListData]) -> QTreeWidgetItem:
-        widget = QTreeWidgetItem([State.apply_object_tree_item_text(item)])
+        widget = QTreeWidgetItem([self.apply_object_tree_item_text(item)])
         if isinstance(item, ObjectData):
             widget.setData(0, Qt.UserRole, str(item.key))
             return widget
@@ -442,12 +637,37 @@ class State:
                 widget.setExpanded(True)
             return widget
 
+    @staticmethod
+    def calc_unique_name(items: List[str]) -> List[str]:
+        items = [name or '未命名' for name in items]
+        repeat = True
+        while repeat:
+            duplicates = defaultdict(list)
+            for i, item in enumerate(items):
+                duplicates[item].append(i)
+            repeat = False
+            for item, indices in duplicates.items():
+                if len(indices) > 1:
+                    repeat = True
+                    for j, index in enumerate(indices):
+                        items[index] += '@' + str(j + 1)
+        return items
+
     def apply_texture_item_text(self, item: TextureData) -> str:
-        return (item.name or '未命名') + ' ' + \
+        return self.texture_names[item.key] + ' ' + \
                ('✓' if item.key in self.valid_textures else '✗')
 
     def apply_texture_item(self, item: TextureData) -> QListWidgetItem:
         widget = QListWidgetItem(self.apply_texture_item_text(item))
+        widget.setData(Qt.UserRole, str(item.key))
+        return widget
+
+    def apply_material_item_text(self, item: MaterialData) -> str:
+        return self.material_names[item.key] + ' ' + \
+               ('✓' if item.key in self.valid_materials else '✗')
+
+    def apply_material_item(self, item: MaterialData) -> QListWidgetItem:
+        widget = QListWidgetItem(self.apply_material_item_text(item))
         widget.setData(Qt.UserRole, str(item.key))
         return widget
 
@@ -518,7 +738,7 @@ class State:
             on_update=on_update,
             on_nop=on_nop,
         )
-        widget.setText(0, State.apply_object_tree_item_text(curr_item))
+        widget.setText(0, self.apply_object_tree_item_text(curr_item))
         if not prev_item.children:
             widget.setExpanded(True)
         return None
@@ -539,7 +759,8 @@ class State:
 
     def apply(self, window: 'MainWindow') -> None:
         blocks: List[QObject] = [
-            window.ui.image, window.ui.objectTree, window.ui.textureList
+            window.ui.image, window.ui.objectTree,
+            window.ui.textureList, window.ui.materialList,
         ]
         for o in blocks:
             o.blockSignals(True)
@@ -552,9 +773,14 @@ class State:
                 self.apply_object_tree_item(self.objects[ob]))
         # texture list
         window.ui.textureList.clear()
-        for text in self.root_texture:
+        for text in self.root_textures:
             window.ui.textureList.addItem(
                 self.apply_texture_item(self.textures[text]))
+        # material list
+        window.ui.materialList.clear()
+        for mat in self.root_materials:
+            window.ui.materialList.addItem(
+                self.apply_material_item(self.materials[mat]))
         # forms
         State.apply_form(
             window.ui.objectProperties.layout(), 4,
@@ -565,6 +791,11 @@ class State:
             window.ui.textureProperties.layout(), 2,
             self.texture_form,
             window.texture_form_changed,
+            window)
+        State.apply_form(
+            window.ui.materialProperties.layout(), 2,
+            self.material_form,
+            window.material_form_changed,
             window)
         self.apply_always(window)
 
@@ -619,8 +850,18 @@ class State:
             window.ui.textureList.item(i).setText(
                 self.apply_texture_item_text(self.textures[key]))
 
+        def on_material_list_update(i: int, key: UUID) -> None:
+            window.ui.materialList.takeItem(i)
+            window.ui.materialList.insertItem(
+                i, self.apply_material_item(self.materials[key]))
+
+        def on_material_list_nop(i: int, key: UUID) -> None:
+            window.ui.materialList.item(i).setText(
+                self.apply_material_item_text(self.materials[key]))
+
         blocks: List[QObject] = [
-            window.ui.image, window.ui.objectTree, window.ui.textureList
+            window.ui.image, window.ui.objectTree,
+            window.ui.textureList, window.ui.materialList,
         ]
         for o in blocks:
             o.blockSignals(True)
@@ -638,15 +879,24 @@ class State:
             on_nop=on_object_tree_nop,
         )
         State.apply_diff_list(
-            prev_state.root_texture,
-            self.root_texture,
+            prev_state.root_textures,
+            self.root_textures,
             on_remove=lambda i: window.ui.textureList.takeItem(i),
             on_add=lambda i, key: window.ui.textureList.insertItem(
                 i, self.apply_texture_item(self.textures[key])),
             on_update=on_texture_list_update,
             on_nop=on_texture_list_nop,
         )
-        # shape form
+        State.apply_diff_list(
+            prev_state.root_materials,
+            self.root_materials,
+            on_remove=lambda i: window.ui.materialList.takeItem(i),
+            on_add=lambda i, key: window.ui.materialList.insertItem(
+                i, self.apply_material_item(self.materials[key])),
+            on_update=on_material_list_update,
+            on_nop=on_material_list_nop,
+        )
+        # forms
         State.apply_diff_form(
             window.ui.objectProperties.layout(), 4,
             prev_state.shape_form, self.shape_form,
@@ -655,6 +905,10 @@ class State:
             window.ui.textureProperties.layout(), 2,
             prev_state.texture_form, self.texture_form,
             window.texture_form_changed, window)
+        State.apply_diff_form(
+            window.ui.materialProperties.layout(), 2,
+            prev_state.material_form, self.material_form,
+            window.material_form_changed, window)
         for o in blocks:
             o.blockSignals(False)
         self.apply_always(window)
@@ -671,7 +925,8 @@ class MainWindow(QMainWindow):
         # state
         self.state = State() \
             .with_more_shapes(v4ray_frontend.shapes) \
-            .with_more_textures(v4ray_frontend.textures)
+            .with_more_textures(v4ray_frontend.textures) \
+            .with_more_materials(v4ray_frontend.materials)
 
         self.state.apply(self)
         # signals
@@ -709,6 +964,13 @@ class MainWindow(QMainWindow):
         self.ui.textureType.lineEdit().editingFinished.connect(
             self.texture_type_changed)
         self.ui.textureName.editingFinished.connect(self.texture_name_changed)
+        self.ui.materialList.currentItemChanged.connect(
+            lambda x, _: self.material_current_changed(x))
+        self.ui.materialAdd.clicked.connect(lambda _: self.material_add())
+        self.ui.materialRemove.clicked.connect(lambda _: self.material_remove())
+        self.ui.materialType.lineEdit().editingFinished.connect(
+            self.material_type_changed)
+        self.ui.materialName.editingFinished.connect(self.material_name_changed)
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
@@ -716,6 +978,10 @@ class MainWindow(QMainWindow):
         self.ui.dockScene.raise_()
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
+
+    def goto_texture(self, uuid: UUID):
+        self.ui.dockTexture.raise_()
+        self.set_state(self.state.with_current_texture(uuid))
 
     def shape_form_changed(self, index: int, data: Any) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
@@ -737,11 +1003,24 @@ class MainWindow(QMainWindow):
         self.set_state(self.state.with_modify_texture(
             self.state.current_texture, modify))
 
+    def material_form_changed(self, index: int, data: Any) -> None:
+        def modify(mat: MaterialData) -> None:
+            assert mat.material is not None
+            material_data = mat.material[1]
+            material_data[index] = data
+            mat.material = mat.material[0], material_data
+        assert self.state.current_material
+        self.set_state(self.state.with_modify_material(
+            self.state.current_material, modify))
+
     def object_add(self, group: bool) -> None:
         self.set_state(self.state.with_add_object(group=group))
 
     def texture_add(self) -> None:
         self.set_state(self.state.with_add_texture())
+
+    def material_add(self) -> None:
+        self.set_state(self.state.with_add_material())
 
     def object_remove(self) -> None:
         widget = self.ui.objectTree.currentItem()
@@ -753,6 +1032,12 @@ class MainWindow(QMainWindow):
         widget = self.ui.textureList.currentItem()
         assert widget
         self.set_state(self.state.with_remove_texture(
+            UUID(widget.data(Qt.UserRole))))
+
+    def material_remove(self) -> None:
+        widget = self.ui.materialList.currentItem()
+        assert widget
+        self.set_state(self.state.with_remove_material(
             UUID(widget.data(Qt.UserRole))))
 
     def object_shape_changed(self) -> None:
@@ -798,6 +1083,27 @@ class MainWindow(QMainWindow):
                 self.state.current_texture, modify))
         QTimer.singleShot(0, update_state)
 
+    def material_type_changed(self) -> None:
+        text = self.ui.materialType.lineEdit().text()
+        assert self.state.current_material
+        material = None if not text or text not in self.state.material_types \
+            else text
+        t = self.state.materials[self.state.current_material]
+        current_mat = '' if t.material is None else t.material[0]
+        if current_mat == text:
+            return
+
+        def modify(mat: MaterialData) -> None:
+            mat.material = None if material is None else \
+                (material, [p.default for p in
+                            self.state.material_types[material].properties()])
+
+        def update_state() -> None:
+            assert self.state.current_material
+            self.set_state(self.state.with_modify_material(
+                self.state.current_material, modify))
+        QTimer.singleShot(0, update_state)
+
     def object_name_changed(self) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
             obj.name = self.ui.objectName_.text()
@@ -811,6 +1117,13 @@ class MainWindow(QMainWindow):
         assert self.state.current_texture
         self.set_state(self.state.with_modify_texture(
             self.state.current_texture, modify))
+
+    def material_name_changed(self) -> None:
+        def modify(mat: MaterialData) -> None:
+            mat.name = self.ui.materialName.text()
+        assert self.state.current_material
+        self.set_state(self.state.with_modify_material(
+            self.state.current_material, modify))
 
     def object_visible_changed(self, visible: bool) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
@@ -828,6 +1141,12 @@ class MainWindow(QMainWindow):
     def texture_current_changed(self,
                                 current: Optional[QListWidgetItem]) -> None:
         self.set_state(self.state.with_current_texture(
+            UUID(current.data(Qt.UserRole))
+            if current is not None else None))
+
+    def material_current_changed(self,
+                                 current: Optional[QListWidgetItem]) -> None:
+        self.set_state(self.state.with_current_material(
             UUID(current.data(Qt.UserRole))
             if current is not None else None))
 
