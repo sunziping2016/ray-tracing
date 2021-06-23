@@ -240,7 +240,7 @@ impl BVH {
             }
             arr
         };
-        if ray.mask().any() {
+        if ray.mask().any() && !self.nodes.is_empty() {
             traverse_recursive(&self.nodes, 0, ray, ray.mask(), t_min, t_max, &mut indices);
         }
         indices

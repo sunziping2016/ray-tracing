@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Any, Protocol
+from typing import List, Any, Protocol, Dict
+from uuid import UUID
 
 import v4ray
 from v4ray_frontend.properties import AnyProperty, ColorProperty
@@ -27,7 +28,8 @@ class TextureType(ABC):
 
     @staticmethod
     @abstractmethod
-    def apply(data: List[Any]) -> TextureLike:
+    def apply(data: List[Any],
+              textures: Dict[UUID, TextureLike]) -> TextureLike:
         pass
 
 
@@ -47,5 +49,6 @@ class SolidColor(TextureType):
         return True
 
     @staticmethod
-    def apply(data: List[Any]) -> TextureLike:
+    def apply(data: List[Any],
+              textures: Dict[UUID, TextureLike]) -> TextureLike:
         return v4ray.texture.SolidColor(data[0])

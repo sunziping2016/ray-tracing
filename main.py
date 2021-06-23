@@ -1,12 +1,16 @@
+import asyncio
 import copy
 import sys
+from asyncio import AbstractEventLoop
 from collections import defaultdict
 from dataclasses import dataclass, field
+from threading import Thread
 from typing import Optional, Union, List, Dict, TypeVar, Any, Tuple, \
     Type, Sequence, Callable, Set
 from uuid import UUID, uuid4
 
 import numpy as np
+from PyQt5 import QtCore
 from PyQt5.QtCore import Qt, QObject, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QResizeEvent, QGuiApplication, \
     QDoubleValidator, QColor, QIntValidator
@@ -15,11 +19,13 @@ from PyQt5.QtWidgets import QMainWindow, QApplication, QTreeWidgetItem, \
     QListWidgetItem, QPushButton, QHBoxLayout, QColorDialog, QTabWidget, \
     QComboBox
 
+import v4ray
 import v4ray_frontend
 from ui_mainwindow import Ui_MainWindow
-from v4ray_frontend.camera import CameraType
-from v4ray_frontend.material import MaterialType
-from v4ray_frontend.texture import TextureType
+from v4ray import RendererParam, Scene
+from v4ray_frontend.camera import CameraType, CameraLike
+from v4ray_frontend.material import MaterialType, MaterialLike
+from v4ray_frontend.texture import TextureType, TextureLike
 from v4ray_frontend.properties import AnyProperty, FloatProperty, \
     ColorProperty, TextureProperty
 from v4ray_frontend.shape import ShapeType
@@ -125,8 +131,9 @@ class FormState:
 
                 def color_picker(i: int = i, color: QColor = color,
                                  title: str = p.name) -> None:
-                    c = QColorDialog.getColor(initial=color, parent=parent,
-                                              title=title)
+                    c = QColorDialog.getColor(
+                        initial=color, parent=parent, title=title,
+                        options=QColorDialog.DontUseNativeDialog)
                     on_new_state(i, (c.red(), c.green(), c.blue()))
                 button.clicked.connect(lambda x: color_picker())
                 layout.addWidget(button)
@@ -185,8 +192,9 @@ class FormState:
 
                 def color_picker(i: int = i, color: QColor = color,
                                  title: str = p.name) -> None:
-                    c = QColorDialog.getColor(initial=color, parent=parent,
-                                              title=title)
+                    c = QColorDialog.getColor(
+                        initial=color, parent=parent, title=title,
+                        options=QColorDialog.DontUseNativeDialog)
                     on_new_state(i, (c.red(), c.green(), c.blue()))
                 button.clicked.disconnect()
                 button.clicked.connect(lambda x: color_picker())
@@ -260,6 +268,11 @@ class State:
     objects_inherited_materials: Dict[UUID, UUID]
     valid_objects: Set[UUID]
     camera_valid: bool
+    visible_objects: Set[UUID]
+
+    rendered_objects: Set[UUID]
+    rendered_materials: Set[UUID]
+    rendered_textures: Set[UUID]
 
     def __init__(
             self,
@@ -385,6 +398,47 @@ class State:
         if self.camera is not None and self.camera_types[self.camera[0]] \
                 .validate(self.camera[1]):
             self.camera_valid = True
+        self.visible_objects = set()
+
+        def object_traversal2(uuids: List[UUID]) -> None:
+            for uuid in uuids:
+                obj = self.objects[uuid]
+                if not obj.visible:
+                    return
+                if isinstance(obj, ObjectListData):
+                    object_traversal2(obj.children)
+                else:
+                    self.visible_objects.add(uuid)
+        object_traversal2(self.root_objects)
+        self.rendered_objects = self.visible_objects & self.valid_objects
+        self.rendered_materials = set()
+        for uuid in self.rendered_objects:
+            obj = self.objects[uuid]
+            assert obj.material is not None
+            self.rendered_materials.add(obj.material)
+        self.rendered_textures = set()
+        for uuid in self.rendered_materials:
+            mat = self.materials[uuid]
+            assert mat.material is not None
+            for i, p in enumerate(
+                    self.material_types[mat.material[0]].properties()):
+                if isinstance(p, TextureProperty):
+                    uuid2 = mat.material[1][i]
+                    assert isinstance(uuid2, UUID)
+                    self.rendered_textures.add(uuid2)
+        stack = list(self.rendered_textures)
+        while stack:
+            uuid = stack.pop()
+            text = self.textures[uuid]
+            assert text.texture is not None
+            for i, p in enumerate(
+                    self.texture_types[text.texture[0]].properties()):
+                if isinstance(p, TextureProperty):
+                    uuid2 = text.texture[1][i]
+                    assert isinstance(uuid2, UUID)
+                    if uuid2 not in self.rendered_textures:
+                        self.rendered_textures.add(uuid2)
+                        stack.append(uuid2)
 
     def object_uuid_to_widget(
             self, window: 'MainWindow', uuid: UUID
@@ -405,6 +459,11 @@ class State:
             kind = shape.kind()
             assert kind not in self.shape_types
             state.shape_types[kind] = shape
+        return State(state)
+
+    def with_render_result(self, image: Optional[np.ndarray]) -> 'State':
+        state = copy.deepcopy(self)
+        state.render_result = image
         return State(state)
 
     def with_more_textures(self,
@@ -554,10 +613,10 @@ class State:
         if group:
             item: Union[ObjectData, ObjectListData] = \
                 ObjectListData(name=name or '', material=None,
-                               children=[], visible=False)
+                               children=[], visible=True)
         else:
             item = ObjectData(name=name or '', shape=None, material=None,
-                              visible=False)
+                              visible=True)
         state.objects[item.key] = item
         if root is None:
             state.root_objects.insert(index, item.key)
@@ -705,14 +764,19 @@ class State:
 
     @staticmethod
     def array_to_pixmap(image: np.ndarray) -> QPixmap:
+        image = np.clip(image * 255, 0, 255).astype(np.uint8)
         return QPixmap(QImage(
             image.tobytes(), image.shape[1], image.shape[0],
             image.shape[1] * 3, QImage.Format_RGB888))
 
     def apply_image(self, window: 'MainWindow') -> None:
-        if self.render_result:
+        if self.render_result is not None:
             pixmap = State.array_to_pixmap(self.render_result)
-            window.ui.image.setPixmap(pixmap)
+            window.ui.image.setPixmap(pixmap.scaled(
+                window.ui.image.width(),
+                window.ui.image.height(),
+                Qt.KeepAspectRatio
+            ))
         else:
             window.ui.image.clear()
 
@@ -910,6 +974,8 @@ class State:
             window.camera_form_changed,
             window)
         self.apply_always(window)
+        if self.camera is not None:
+            window.trigger_preview()
 
     @staticmethod
     def apply_diff_form(layout: QLayout,
@@ -1028,14 +1094,83 @@ class State:
         for o in blocks:
             o.blockSignals(False)
         self.apply_always(window)
+        if self.camera is not None and self.need_rerender(prev_state):
+            window.trigger_preview()
+
+    def need_rerender(self, prev_state: 'State') -> bool:
+        if self.camera != prev_state.camera:
+            return True
+        if self.rendered_objects != prev_state.rendered_objects or \
+                self.rendered_materials != prev_state.rendered_materials or \
+                self.rendered_textures != prev_state.rendered_textures:
+            return True
+        for uuid in self.rendered_objects:
+            obj1 = self.objects[uuid]
+            obj2 = prev_state.objects[uuid]
+            assert isinstance(obj1, ObjectData) and isinstance(obj2, ObjectData)
+            if obj1.shape != obj2.shape or obj1.material != obj2.material:
+                return True
+        for uuid in self.rendered_materials:
+            mat1 = self.materials[uuid]
+            mat2 = prev_state.materials[uuid]
+            if mat1.material != mat2.material:
+                return True
+        for uuid in self.rendered_textures:
+            text1 = self.textures[uuid]
+            text2 = prev_state.textures[uuid]
+            if text1.texture != text2.texture:
+                return True
+        return False
+
+    def generate(self,
+                 preview: bool) -> Tuple[RendererParam, CameraLike, Scene]:
+        textures: Dict[UUID, TextureLike] = {}
+
+        def generate_texture(uuid: UUID) -> None:
+            if uuid in textures:
+                return
+            text = self.textures[uuid]
+            assert text.texture is not None
+            texture_type = self.texture_types[text.texture[0]]
+            for i, p in enumerate(texture_type.properties()):
+                if isinstance(p, TextureProperty):
+                    generate_texture(text.texture[1][i])
+            textures[uuid] = texture_type.apply(text.texture[1], textures)
+        for uuid in self.rendered_textures:
+            generate_texture(uuid)
+        materials: Dict[UUID, MaterialLike] = {}
+        for uuid in self.rendered_materials:
+            mat = self.materials[uuid]
+            assert mat.material is not None
+            mat_type = self.material_types[mat.material[0]]
+            if preview:
+                materials[uuid] = mat_type.apply_preview(mat.material[1],
+                                                         textures)
+            else:
+                materials[uuid] = mat_type.apply(mat.material[1], textures)
+        scene = Scene(background=(1.0, 1.0, 1.0))  # TODO: background
+        for uuid in self.rendered_objects:
+            obj = self.objects[uuid]
+            assert isinstance(obj, ObjectData)
+            assert obj.shape is not None and obj.material is not None
+            for s in self.shape_types[obj.shape[0]].apply(obj.shape[1]):
+                scene.add(s, materials[obj.material])
+        assert self.camera is not None
+        camera = self.camera_types[self.camera[0]].apply(self.camera[1])
+        renderer = RendererParam(self.renderer.width, self.renderer.height,
+                                 2 if preview else self.renderer.max_depth)
+        return renderer, camera, scene
 
 
 class MainWindow(QMainWindow):
     ui: Ui_MainWindow
     state: State
+    loop: AbstractEventLoop
+    render_result = QtCore.pyqtSignal(np.ndarray)
 
-    def __init__(self) -> None:
+    def __init__(self, loop: AbstractEventLoop) -> None:
         super(MainWindow, self).__init__()
+        self.loop = loop
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         # state
@@ -1101,25 +1236,39 @@ class MainWindow(QMainWindow):
             self.renderer_height_changed)
         self.ui.renderMaxDepth.editingFinished.connect(
             self.renderer_max_depth_changed)
+        self.render_result.connect(self.render_result_available)
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
-        self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
-        self.tabifyDockWidget(self.ui.dockScene, self.ui.dockTexture)
+        # self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
+        # self.tabifyDockWidget(self.ui.dockScene, self.ui.dockTexture)
         self.ui.dockScene.raise_()
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
 
-    def renderer_width_changed(self):
+    @QtCore.pyqtSlot(np.ndarray)
+    def render_result_available(self, data: np.ndarray) -> None:
+        self.set_state(self.state.with_render_result(data))
+
+    def trigger_preview(self) -> None:
+        def trigger():
+            param, camera, scene = self.state.generate(True)
+            renderer = v4ray.Renderer(param, camera, scene)
+            asyncio.run_coroutine_threadsafe(
+                render(renderer, self.render_result),
+                self.loop)
+        QTimer.singleShot(0, trigger)
+
+    def renderer_width_changed(self) -> None:
         def modify(renderer: RendererData) -> None:
             renderer.width = int(self.ui.renderWidth.text())
         self.set_state(self.state.with_modify_renderer(modify))
 
-    def renderer_height_changed(self):
+    def renderer_height_changed(self) -> None:
         def modify(renderer: RendererData) -> None:
             renderer.height = int(self.ui.renderHeight.text())
         self.set_state(self.state.with_modify_renderer(modify))
 
-    def renderer_max_depth_changed(self):
+    def renderer_max_depth_changed(self) -> None:
         def modify(renderer: RendererData) -> None:
             renderer.max_depth = int(self.ui.renderMaxDepth.text())
         self.set_state(self.state.with_modify_renderer(modify))
@@ -1354,14 +1503,32 @@ class MainWindow(QMainWindow):
         self.state = state
 
 
-def main() -> None:
-    app = QApplication(sys.argv)
-    app.setApplicationName('dashboard')
+async def render(renderer: v4ray.Renderer,
+                 signal: QtCore.pyqtBoundSignal) -> None:
+    data = await renderer.render()
+    signal.emit(data)
 
-    window = MainWindow()
+
+def async_loop(loop: AbstractEventLoop) -> None:
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+def gui_loop(loop: AbstractEventLoop) -> None:
+    app = QApplication(sys.argv)
+    app.setApplicationName('renderer')
+
+    window = MainWindow(loop)
     window.show()
 
     sys.exit(app.exec_())
+
+
+def main() -> None:
+    loop = asyncio.get_event_loop()
+    t = Thread(target=async_loop, args=(loop,), daemon=True)
+    t.start()
+    gui_loop(loop)
 
 
 if __name__ == '__main__':
