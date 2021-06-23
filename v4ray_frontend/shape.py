@@ -38,8 +38,10 @@ class Sphere(Shape):
 
     @staticmethod
     def apply(data: List[Any]) -> Any:
-        x: float = data[0]
-        y: float = data[1]
-        z: float = data[2]
-        radius: float = data[3]
+        x = data[0]
+        y = data[1]
+        z = data[2]
+        radius = data[3]
+        assert isinstance(x, float) and isinstance(y, float) and \
+               isinstance(z, float) and isinstance(radius, float)
         return v4ray.shape.Sphere((x, y, z), radius)

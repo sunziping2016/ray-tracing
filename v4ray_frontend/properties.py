@@ -1,13 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, List, Any, Union, Callable
-
-
-@dataclass
-class IntProperty:
-    name: str
-    default: int = 0
-    min: Optional[int] = None
-    max: Optional[int] = None
+from typing import Optional, Tuple, List, Any, Union
 
 
 @dataclass
@@ -20,29 +12,19 @@ class FloatProperty:
 
 
 @dataclass
-class BoolProperty:
-    name: str
-    default: bool = False
-
-
-@dataclass
 class ColorProperty:
     name: str
     default: Tuple[int, int, int] = (255, 255, 255)
 
 
 @dataclass
-class EnumProperty:
+class TextureProperty:
     name: str
-    options: List[Tuple[str, Any]]
-    default: Any
-    required: bool = True
+    default: Optional[str] = None
 
 
 AnyProperty = Union[
-    IntProperty,
     FloatProperty,
-    BoolProperty,
     ColorProperty,
-    EnumProperty
+    TextureProperty,
 ]
