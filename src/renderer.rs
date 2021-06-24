@@ -28,16 +28,24 @@ pub struct RendererParam {
     pub height: u32,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub max_depth: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub antialias: Option<bool>,
 }
 
 #[pymethods]
 impl RendererParam {
     #[new]
-    pub fn py_new(width: u32, height: u32, max_depth: Option<u32>) -> Self {
+    pub fn py_new(
+        width: u32,
+        height: u32,
+        max_depth: Option<u32>,
+        antialias: Option<bool>,
+    ) -> Self {
         Self {
             width,
             height,
             max_depth,
+            antialias,
         }
     }
 }
@@ -73,10 +81,14 @@ where
         let (xs, ys): (Vec<_>, Vec<_>) =
             iproduct!((0..self.param.height).rev(), (0..self.param.width).rev())
                 .map(|(j, i)| {
-                    (
-                        rng.gen_range(((i as f32 - 0.5) / width)..((i as f32 + 0.5) / width)),
-                        rng.gen_range(((j as f32 - 0.5) / height)..((j as f32 + 0.5) / height)),
-                    )
+                    if let Some(false) = self.param.antialias {
+                        (i as f32 / width, j as f32 / height)
+                    } else {
+                        (
+                            rng.gen_range(((i as f32 - 0.5) / width)..((i as f32 + 0.5) / width)),
+                            rng.gen_range(((j as f32 - 0.5) / height)..((j as f32 + 0.5) / height)),
+                        )
+                    }
                 })
                 .chain(iter::repeat((f32::NAN, f32::NAN)).take(F::lanes() - 1))
                 .unzip();

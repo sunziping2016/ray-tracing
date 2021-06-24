@@ -1169,7 +1169,8 @@ class State:
         assert self.camera is not None
         camera = self.camera_types[self.camera[0]].apply(self.camera[1])
         renderer = RendererParam(self.renderer.width, self.renderer.height,
-                                 2 if preview else self.renderer.max_depth)
+                                 2 if preview else self.renderer.max_depth,
+                                 not preview)
         return renderer, camera, scene
 
 

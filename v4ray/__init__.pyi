@@ -66,6 +66,7 @@ class RendererParam:
             width: int,
             height: int,
             max_depth: Optional[int] = None,
+            antialias: Optional[bool] = None,
     ) -> RendererParam: ...
 
 
