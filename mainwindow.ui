@@ -64,6 +64,7 @@
     <addaction name="open"/>
     <addaction name="save"/>
     <addaction name="saveAs"/>
+    <addaction name="exportImage"/>
    </widget>
    <widget class="QMenu" name="viewMenu">
     <property name="title">
@@ -740,6 +741,14 @@
   <action name="about">
    <property name="text">
     <string>关于</string>
+   </property>
+  </action>
+  <action name="exportImage">
+   <property name="text">
+    <string>导出...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+E</string>
    </property>
   </action>
  </widget>

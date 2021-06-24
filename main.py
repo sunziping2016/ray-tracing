@@ -1701,6 +1701,7 @@ class MainWindow(QMainWindow):
             self.ui.viewMenu.addAction(dock.toggleViewAction())
         self.ui.history.currentRowChanged.connect(
             lambda i: self.move_history(list(self.history.keys())[i]))
+        self.ui.exportImage.triggered.connect(lambda _: self.export())
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
@@ -1908,6 +1909,16 @@ class MainWindow(QMainWindow):
             with open(self.filename, 'w') as f:
                 json.dump(self.state.to_json(self.filename), f)
 
+    def export(self) -> None:
+        pixmap = self.ui.image.pixmap()
+        if pixmap is None:
+            return
+        filename = QFileDialog.getSaveFileName(
+            self, caption='导出图片', filter="图像文件 (*.jpeg *.jpg *.png *.bmp)",
+            options=QFileDialog.DontUseNativeDialog)[0]
+        if filename is not None:
+            pixmap.save(filename)
+
     def render_background_set(self) -> None:
         initial = QColor(*self.state.renderer.background)
         color = QColorDialog.getColor(
@@ -1944,8 +1955,8 @@ class MainWindow(QMainWindow):
         def trigger() -> None:
             param, camera, scene = self.state.generate(False)
             self.renderer = v4ray.Renderer(param, camera, scene)
-            self.set_state(self.state.with_rendering(1))
-            for _ in range(1):
+            self.set_state(self.state.with_rendering(2))
+            for _ in range(2):
                 asyncio.run_coroutine_threadsafe(
                     render(self.renderer, self.render_result),
                     self.loop)
