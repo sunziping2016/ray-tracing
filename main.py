@@ -245,8 +245,8 @@ class FormState:
 class State:
     previewing: bool
     preview_result: Optional[np.ndarray]
-    rendering: bool
-    render_result: Optional[Tuple[Type[np.ndarray], int]]
+    rendering: int
+    render_result: Optional[Tuple[np.ndarray, int]]
 
     root_objects: List[UUID]
     objects: Dict[UUID, Union[ObjectData, ObjectListData]]
@@ -295,7 +295,7 @@ class State:
         if prev_state is None:
             self.previewing = False
             self.preview_result = None
-            self.rendering = False
+            self.rendering = 0
             self.render_result = None
             self.root_objects = []
             self.objects = {}
@@ -713,6 +713,16 @@ class State:
             widget = widget.child(parents.pop())
         return widget
 
+    def with_previewing(self, previewing: bool) -> 'State':
+        state = State(self)
+        state.previewing = previewing
+        return state.recalculate(self)
+
+    def with_rendering(self, rendering: int) -> 'State':
+        state = State(self)
+        state.rendering = rendering
+        return state.recalculate(self)
+
     def with_more_shapes(self, shapes: Sequence[Type[ShapeType]]) -> 'State':
         state = State(self)
         state.shape_types = state.shape_types.copy()
@@ -725,6 +735,18 @@ class State:
     def with_preview_result(self, image: Optional[np.ndarray]) -> 'State':
         state = State(self)
         state.preview_result = image
+        return state.recalculate(self)
+
+    def with_render_result(self, image: Optional[np.ndarray]) -> 'State':
+        state = State(self)
+        if image is None:
+            state.render_result = None
+        elif state.render_result is None:
+            state.render_result = image, 1
+        else:
+            total_image, count = state.render_result
+            total_image = total_image + image
+            state.render_result = total_image, count + 1
         return state.recalculate(self)
 
     def with_more_textures(self,
@@ -1048,8 +1070,41 @@ class State:
         window.ui.renderBackground.setStyleSheet(
             f'QPushButton:enabled '
             f'{{ background-color: {background_color.name()}; }}')
+        sample = 0
+        if self.render_result is not None:
+            window.ui.renderStatus.setText('渲染采样：' + \
+                                           str(self.render_result[1]))
         for o in blocks:
             o.blockSignals(False)
+        if self.previewing:
+            widgets: List[QWidget] = [
+                window.ui.dockOperation, window.ui.dockTexture,
+                window.ui.dockScene, window.ui.dockMaterial,
+                window.ui.dockCamera]
+            for d in widgets:
+                d.setEnabled(False)
+            for d in [window.ui.cameraProperties, window.ui.rendererProperties]:
+                d.setEnabled(True)
+        elif self.rendering != 0:
+            widgets = [window.ui.dockOperation, window.ui.dockTexture,
+                       window.ui.dockScene, window.ui.dockMaterial,
+                       window.ui.cameraProperties, window.ui.rendererProperties]
+            for d in widgets:
+                d.setEnabled(False)
+            for d in [window.ui.dockCamera]:
+                d.setEnabled(True)
+        else:
+            widgets = [window.ui.dockOperation, window.ui.dockTexture,
+                       window.ui.dockScene, window.ui.dockMaterial,
+                       window.ui.cameraProperties, window.ui.rendererProperties,
+                       window.ui.dockCamera]
+            for d in widgets:
+                d.setEnabled(True)
+        window.ui.renderStart.setEnabled(not self.previewing and
+                                         self.rendering == 0 and
+                                         self.camera is not None)
+        window.ui.renderStop.setEnabled(not self.previewing
+                                        and self.rendering != 0)
 
     @staticmethod
     def array_to_pixmap(image: np.ndarray) -> QPixmap:
@@ -1059,7 +1114,15 @@ class State:
             image.shape[1] * 3, QImage.Format_RGB888))
 
     def apply_image(self, window: 'MainWindow') -> None:
-        if self.preview_result is not None:
+        if self.render_result is not None:
+            pixmap = State.array_to_pixmap(self.render_result[0] /
+                                           self.render_result[1])
+            window.ui.image.setPixmap(pixmap.scaled(
+                window.ui.image.width(),
+                window.ui.image.height(),
+                Qt.KeepAspectRatio
+            ))
+        elif self.preview_result is not None:
             pixmap = State.array_to_pixmap(self.preview_result)
             window.ui.image.setPixmap(pixmap.scaled(
                 window.ui.image.width(),
@@ -1264,8 +1327,7 @@ class State:
             window.camera_form_changed,
             window)
         self.apply_always(window)
-        if self.camera is not None:
-            window.trigger_preview()
+        window.trigger_preview(self.camera is not None)
 
     @staticmethod
     def apply_diff_form(layout: QLayout,
@@ -1334,7 +1396,8 @@ class State:
         for o in blocks:
             o.blockSignals(True)
         # render result
-        if id(self.preview_result) != id(prev_state.preview_result):
+        if id(self.preview_result) != id(prev_state.preview_result) or \
+                id(self.render_result) != id(prev_state.render_result):
             self.apply_image(window)
         # object tree
         State.apply_diff_list(
@@ -1385,7 +1448,9 @@ class State:
             o.blockSignals(False)
         self.apply_always(window)
         if self.camera is not None and self.need_rerender(prev_state):
-            window.trigger_preview()
+            window.trigger_preview(True)
+        elif self.camera is None:
+            window.trigger_preview(False)
 
     def need_rerender(self, prev_state: 'State') -> bool:
         if id(self.camera) != id(prev_state.camera) or \
@@ -1523,11 +1588,13 @@ class HistoryItem:
 
 class MainWindow(QMainWindow):
     render_result = QtCore.pyqtSignal(np.ndarray)
+    preview_result = QtCore.pyqtSignal(np.ndarray)
     ui: Ui_MainWindow
     loop: AbstractEventLoop
 
     state: State
     filename: Optional[str]
+    renderer: Optional[v4ray.Renderer]
     history: typing.OrderedDict[int, HistoryItem]
     current_history: int
 
@@ -1541,6 +1608,7 @@ class MainWindow(QMainWindow):
         os.makedirs(folder, exist_ok=True)
         self.workspace_path = os.path.join(folder, 'workspace.pkl')
         self.load_workspace()
+        self.renderer = None
         # undo redo
 
         def move_history_parent() -> None:
@@ -1620,10 +1688,13 @@ class MainWindow(QMainWindow):
         self.ui.renderBackground.clicked.connect(
             lambda _: self.render_background_set())
         self.render_result.connect(self.render_result_available)
+        self.preview_result.connect(self.preview_result_available)
         self.ui.about.triggered.connect(lambda x: self.about())
         self.ui.open.triggered.connect(lambda x: self.open())
         self.ui.save.triggered.connect(lambda x: self.save())
         self.ui.saveAs.triggered.connect(lambda x: self.save_as())
+        self.ui.renderStart.clicked.connect(lambda _: self.start_render())
+        self.ui.renderStop.clicked.connect(lambda _: self.stop_render())
         for dock in [self.ui.dockScene, self.ui.dockTexture,
                      self.ui.dockMaterial, self.ui.dockCamera,
                      self.ui.dockOperation]:
@@ -1852,17 +1923,53 @@ class MainWindow(QMainWindow):
                 f'设置渲染背景色为 {color.name()}')
 
     @QtCore.pyqtSlot(np.ndarray)
+    def preview_result_available(self, data: np.ndarray) -> None:
+        self.set_state(self.state
+                       .with_preview_result(data)
+                       .with_previewing(False))
+
+    @QtCore.pyqtSlot(np.ndarray)
     def render_result_available(self, data: np.ndarray) -> None:
-        self.set_state(self.state.with_preview_result(data))
-
-    def trigger_preview(self) -> None:
-        def trigger() -> None:
-            param, camera, scene = self.state.generate(True)
-            renderer = v4ray.Renderer(param, camera, scene)
+        state = self.state.with_render_result(data)
+        if self.renderer is not None:
             asyncio.run_coroutine_threadsafe(
-                render(renderer, self.render_result),
+                render(self.renderer, self.render_result),
                 self.loop)
+        else:
+            rendering = self.state.rendering
+            state = state.with_rendering(rendering - 1)
+        self.set_state(state)
 
+    def start_render(self) -> None:
+        def trigger() -> None:
+            param, camera, scene = self.state.generate(False)
+            self.renderer = v4ray.Renderer(param, camera, scene)
+            self.set_state(self.state.with_rendering(1))
+            for _ in range(1):
+                asyncio.run_coroutine_threadsafe(
+                    render(self.renderer, self.render_result),
+                    self.loop)
+        QTimer.singleShot(0, trigger)
+
+    def stop_render(self) -> None:
+        self.renderer = None
+
+    def trigger_preview(self, preview: bool) -> None:
+        def trigger() -> None:
+            if preview:
+                param, camera, scene = self.state.generate(True)
+                renderer = v4ray.Renderer(param, camera, scene)
+                asyncio.run_coroutine_threadsafe(
+                    render(renderer, self.preview_result),
+                    self.loop)
+                self.set_state(self.state
+                               .with_previewing(True)
+                               .with_render_result(None))
+            elif self.state.preview_result is not None or \
+                    self.state.render_result is not None:
+                self.set_state(self.state
+                               .with_preview_result(None)
+                               .with_render_result(None))
         QTimer.singleShot(0, trigger)
 
     def renderer_width_changed(self) -> None:
