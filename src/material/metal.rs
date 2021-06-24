@@ -1,11 +1,14 @@
 use crate::hittable::HitRecord;
 use crate::material::{reflect, Material, ScatterRecord};
+use crate::py::PyVector3;
 use crate::random::random_in_unit_sphere;
 use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field};
 use nalgebra::{SimdValue, UnitVector3, Vector3};
+use pyo3::proc_macro::{pyclass, pymethods};
 use rand::Rng;
 
+#[pyclass(name = "Metal")]
 #[derive(Debug, Clone)]
 pub struct Metal {
     albedo: Vector3<f32>,
@@ -38,5 +41,13 @@ where
             attenuation: Vector3::splat(self.albedo),
             specular_ray,
         };
+    }
+}
+
+#[pymethods]
+impl Metal {
+    #[new]
+    pub fn py_new(albedo: PyVector3, fuzz: f32) -> Self {
+        Self::new(Vector3::new(albedo.0, albedo.1, albedo.2), fuzz)
     }
 }

@@ -4,8 +4,10 @@ use crate::random::random_uniform;
 use crate::ray::Ray;
 use crate::SimdF32Field;
 use nalgebra::{SimdBool, SimdRealField, UnitVector3, Vector3};
+use pyo3::proc_macro::{pyclass, pymethods};
 use rand::Rng;
 
+#[pyclass(name = "Dielectric")]
 #[derive(Debug, Clone)]
 pub struct Dielectric {
     ir: f32,
@@ -54,5 +56,13 @@ where
                 r_in.mask(),
             ),
         }
+    }
+}
+
+#[pymethods]
+impl Dielectric {
+    #[new]
+    pub fn py_new(ir: f32) -> Self {
+        Self::new(ir)
     }
 }

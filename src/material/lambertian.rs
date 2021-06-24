@@ -63,8 +63,8 @@ impl Material<PySimd, PyRng> for PyLambertian {
 #[pymethods]
 impl PyLambertian {
     #[new]
-    fn py_new(py: Python, item: Py<PyAny>) -> Self {
-        let texture = to_texture(py, item);
+    pub fn py_new(py: Python, texture: Py<PyAny>) -> Self {
+        let texture = to_texture(py, texture);
         Self {
             inner: Lambertian::new(texture),
         }

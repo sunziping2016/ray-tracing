@@ -435,11 +435,28 @@ class State:
             self.valid_textures = prev_state.valid_textures
         else:
             self.valid_textures = set()
-            for uuid, texture in self.textures.items():
-                if texture.name and texture.texture is not None and \
-                        self.texture_types[texture.texture[0]].validate(
-                            texture.texture[1]):
+            visited_textures = set()
+
+            def texture_traversal(uuid: UUID) -> None:
+                if uuid in visited_textures:
+                    return
+                visited_textures.add(uuid)
+                text = self.textures[uuid]
+                if text.texture is not None:
+                    for i, p in enumerate(
+                            self.texture_types[text.texture[0]].properties()):
+                        if isinstance(p, TextureProperty):
+                            sub_text = text.texture[1][i]
+                            if sub_text is not None:
+                                # noinspection PyTypeChecker
+                                texture_traversal(sub_text)
+                if text.name and text.texture is not None and \
+                        self.texture_types[text.texture[0]].validate(
+                            text.texture[1], self.valid_textures):
                     self.valid_textures.add(uuid)
+
+            for uuid in self.textures:
+                texture_traversal(uuid)
         if prev_state is not None and \
                 id(self.materials) == id(prev_state.materials) and \
                 id(self.material_types) == id(prev_state.material_types) and \
@@ -660,6 +677,7 @@ class State:
             state.objects[UUID(u)].key = UUID(u)
         state.root_textures = [UUID(t) for t in data['textures']]
         state.current_texture = None
+        state.textures = {}
         for u, t in data['textures'].items():
             text = t.get('type')
             if text is not None:
@@ -672,6 +690,7 @@ class State:
             state.textures[UUID(u)].key = UUID(u)
         state.root_materials = [UUID(t) for t in data['materials']]
         state.current_material = None
+        state.materials = {}
         for u, m in data['materials'].items():
             mat = m.get('type')
             if mat is not None:
@@ -730,7 +749,7 @@ class State:
             kind = shape.kind()
             assert kind not in self.shape_types
             state.shape_types[kind] = shape
-        return state.recalculate(self).recalculate(self)
+        return state.recalculate(self)
 
     def with_preview_result(self, image: Optional[np.ndarray]) -> 'State':
         state = State(self)
@@ -1736,6 +1755,7 @@ class MainWindow(QMainWindow):
             self.history = OrderedDict()
             self.current_history = -1
             self.state = State() \
+                .recalculate(None) \
                 .with_more_shapes(v4ray_frontend.shapes) \
                 .with_more_textures(v4ray_frontend.textures) \
                 .with_more_materials(v4ray_frontend.materials) \

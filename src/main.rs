@@ -116,6 +116,7 @@ where
             Arc::new(Lambertian::new(Checker::new(
                 SolidColor::new(Vector3::new(0.2f32, 0.3f32, 0.1f32)),
                 SolidColor::new(Vector3::new(0.9f32, 0.9f32, 0.9f32)),
+                10f32,
             ))),
         );
         for a in -11..11 {
