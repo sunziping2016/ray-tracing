@@ -279,7 +279,7 @@ class State:
     camera_form: Optional[Tuple[str, FormState]]
     valid_textures: Set[UUID]
     valid_materials: Set[UUID]
-    objects_inherited_materials: Dict[UUID, UUID]
+    inherited_materials: Dict[UUID, UUID]
     valid_objects: Set[UUID]
     camera_valid: bool
     visible_objects: Set[UUID]
@@ -476,9 +476,10 @@ class State:
                 id(self.material_types) == id(prev_state.material_types) and \
                 id(self.shape_types) == id(prev_state.shape_types) and \
                 id(self.valid_materials) == id(prev_state.valid_materials):
+            self.inherited_materials = prev_state.inherited_materials
             self.valid_objects = prev_state.valid_objects
         else:
-            self.objects_inherited_materials = {}
+            self.inherited_materials = {}
             self.valid_objects = set()
 
             def object_traversal(uuids: List[UUID],
@@ -491,7 +492,7 @@ class State:
                     else:
                         n_inherited = inherited
                     if n_inherited:
-                        self.objects_inherited_materials[obj.key] = n_inherited
+                        self.inherited_materials[obj.key] = n_inherited
                     if isinstance(obj, ObjectListData):
                         object_traversal(obj.children, n_inherited)
 
@@ -500,8 +501,8 @@ class State:
                 if isinstance(obj, ObjectData) and \
                         obj.name and obj.shape is not None and \
                         self.shape_types[obj.shape[0]].validate(obj.shape[1]) \
-                        and obj.key in self.objects_inherited_materials and \
-                        self.objects_inherited_materials[obj.key] \
+                        and obj.key in self.inherited_materials and \
+                        self.inherited_materials[obj.key] \
                         in self.valid_materials:
                     self.valid_objects.add(uuid)
         if prev_state is not None and \
@@ -544,9 +545,8 @@ class State:
         else:
             self.rendered_materials = set()
             for uuid in self.rendered_objects:
-                obj = self.objects[uuid]
-                assert obj.material is not None
-                self.rendered_materials.add(obj.material)
+                self.rendered_materials.add(
+                    self.inherited_materials[uuid])
         if prev_state is not None and \
                 id(self.rendered_materials) == \
                 id(prev_state.rendered_materials) and \
@@ -1089,10 +1089,11 @@ class State:
         window.ui.renderBackground.setStyleSheet(
             f'QPushButton:enabled '
             f'{{ background-color: {background_color.name()}; }}')
-        sample = 0
         if self.render_result is not None:
-            window.ui.renderStatus.setText('渲染采样：' + \
-                                           str(self.render_result[1]))
+            window.ui.renderStatus.setText(
+                '渲染采样：' + str(self.render_result[1]))
+        else:
+            window.ui.renderStatus.setText('渲染采样：0')
         for o in blocks:
             o.blockSignals(False)
         if self.previewing:
@@ -1543,10 +1544,11 @@ class State:
             environment=(1.0, 1.0, 1.0) if preview else (0.0, 0.0, 0.0))
         for uuid in self.rendered_objects:
             obj = self.objects[uuid]
-            assert isinstance(obj, ObjectData)
-            assert obj.shape is not None and obj.material is not None
+            if not isinstance(obj, ObjectData):
+                continue
+            assert obj.shape is not None
             for s in self.shape_types[obj.shape[0]].apply(obj.shape[1]):
-                scene.add(s, materials[obj.material])
+                scene.add(s, materials[self.inherited_materials[uuid]])
         assert self.camera is not None
         camera = self.camera_types[self.camera[0]].apply(self.camera[1])
         renderer = RendererParam(self.renderer.width, self.renderer.height,
@@ -2187,14 +2189,13 @@ class MainWindow(QMainWindow):
             return
 
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
-            assert isinstance(obj, ObjectData)
             obj.material = uuid
 
         def update_state() -> None:
             assert self.state.current_object
             name = self.state.object_names[self.state.current_object]
             self.set_state(self.state.with_modify_object(
-                self.state.current_object, modify), f'修改对象 {name} 的材料')
+                self.state.current_object, modify), f'修改对象(组) {name} 的材料')
 
         QTimer.singleShot(0, update_state)
 
