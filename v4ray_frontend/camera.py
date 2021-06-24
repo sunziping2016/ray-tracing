@@ -42,7 +42,7 @@ class PerspectiveCamera(CameraType):
         return [
             FloatProperty('坐标 x'),  # 0
             FloatProperty('坐标 y'),  # 1
-            FloatProperty('坐标 z'),  # 2
+            FloatProperty('坐标 z', default=-10),  # 2
             FloatProperty('看向 x'),  # 3
             FloatProperty('看向 y'),  # 4
             FloatProperty('看向 z'),  # 5

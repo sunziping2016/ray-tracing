@@ -70,6 +70,7 @@ class RendererData:
     width: int
     height: int
     max_depth: int
+    background: Tuple[int, int, int]
 
 
 class FormState:
@@ -134,7 +135,8 @@ class FormState:
                     c = QColorDialog.getColor(
                         initial=color, parent=parent, title=title,
                         options=QColorDialog.DontUseNativeDialog)
-                    on_new_state(i, (c.red(), c.green(), c.blue()))
+                    if c.isValid():
+                        on_new_state(i, (c.red(), c.green(), c.blue()))
                 button.clicked.connect(lambda x: color_picker())
                 layout.addWidget(button)
                 layout.addStretch(1)
@@ -195,7 +197,8 @@ class FormState:
                     c = QColorDialog.getColor(
                         initial=color, parent=parent, title=title,
                         options=QColorDialog.DontUseNativeDialog)
-                    on_new_state(i, (c.red(), c.green(), c.blue()))
+                    if c.isValid():
+                        on_new_state(i, (c.red(), c.green(), c.blue()))
                 button.clicked.disconnect()
                 button.clicked.connect(lambda x: color_picker())
             elif isinstance(p, TextureProperty):
@@ -295,7 +298,9 @@ class State:
             self.material_types = {}
             self.camera = None
             self.camera_types = {}
-            self.renderer = RendererData(width=800, height=600, max_depth=20)
+            self.renderer = RendererData(
+                width=800, height=600, max_depth=20,
+                background=(255, 255, 255))
         else:
             self.render_result = prev_state.render_result
             self.root_objects = prev_state.root_objects
@@ -666,7 +671,7 @@ class State:
             window.ui.objectMaterialGo, window.ui.objectMaterial.lineEdit(),
             window.ui.cameraType, window.ui.cameraType.lineEdit(),
             window.ui.renderWidth, window.ui.renderHeight,
-            window.ui.renderMaxDepth]
+            window.ui.renderMaxDepth, window.ui.renderBackground]
         for o in blocks:
             o.blockSignals(True)
         window.ui.objectClearSelection.setEnabled(bool(self.current_object))
@@ -759,6 +764,10 @@ class State:
         window.ui.renderWidth.setText(str(self.renderer.width))
         window.ui.renderHeight.setText(str(self.renderer.height))
         window.ui.renderMaxDepth.setText(str(self.renderer.max_depth))
+        background_color = QColor(*self.renderer.background)
+        window.ui.renderBackground.setStyleSheet(
+            f'QPushButton:enabled '
+            f'{{ background-color: {background_color.name()}; }}')
         for o in blocks:
             o.blockSignals(False)
 
@@ -1098,7 +1107,8 @@ class State:
             window.trigger_preview()
 
     def need_rerender(self, prev_state: 'State') -> bool:
-        if self.camera != prev_state.camera:
+        if self.camera != prev_state.camera or \
+                self.renderer != prev_state.renderer:
             return True
         if self.rendered_objects != prev_state.rendered_objects or \
                 self.rendered_materials != prev_state.rendered_materials or \
@@ -1148,7 +1158,8 @@ class State:
                                                          textures)
             else:
                 materials[uuid] = mat_type.apply(mat.material[1], textures)
-        scene = Scene(background=(1.0, 1.0, 1.0))  # TODO: background
+        scene = Scene(background=ColorProperty.map_color(
+            self.renderer.background))
         for uuid in self.rendered_objects:
             obj = self.objects[uuid]
             assert isinstance(obj, ObjectData)
@@ -1236,6 +1247,8 @@ class MainWindow(QMainWindow):
             self.renderer_height_changed)
         self.ui.renderMaxDepth.editingFinished.connect(
             self.renderer_max_depth_changed)
+        self.ui.renderBackground.clicked.connect(
+            lambda _: self.render_background_set())
         self.render_result.connect(self.render_result_available)
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
@@ -1245,12 +1258,23 @@ class MainWindow(QMainWindow):
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
 
+    def render_background_set(self) -> None:
+        color = QColorDialog.getColor(
+            initial=QColor(*self.state.renderer.background),
+            parent=self, title='渲染背景色',
+            options=QColorDialog.DontUseNativeDialog)
+
+        def modify(renderer: RendererData) -> None:
+            renderer.background = color.red(), color.green(), color.blue()
+        if color.isValid():
+            self.set_state(self.state.with_modify_renderer(modify))
+
     @QtCore.pyqtSlot(np.ndarray)
     def render_result_available(self, data: np.ndarray) -> None:
         self.set_state(self.state.with_render_result(data))
 
     def trigger_preview(self) -> None:
-        def trigger():
+        def trigger() -> None:
             param, camera, scene = self.state.generate(True)
             renderer = v4ray.Renderer(param, camera, scene)
             asyncio.run_coroutine_threadsafe(

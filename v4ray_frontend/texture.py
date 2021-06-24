@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Any, Protocol, Dict
+from typing import List, Any, Protocol, Dict, Tuple
 from uuid import UUID
 
 import v4ray
@@ -51,4 +51,4 @@ class SolidColor(TextureType):
     @staticmethod
     def apply(data: List[Any],
               textures: Dict[UUID, TextureLike]) -> TextureLike:
-        return v4ray.texture.SolidColor(data[0])
+        return v4ray.texture.SolidColor(ColorProperty.map_color(data[0]))

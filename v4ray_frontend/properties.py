@@ -17,6 +17,10 @@ class ColorProperty:
     name: str
     default: Tuple[int, int, int] = (255, 255, 255)
 
+    @staticmethod
+    def map_color(color: Tuple[int, int, int]) -> Tuple[float, float, float]:
+        return color[0] / 255, color[1] / 255.0, color[2] / 255.0
+
 
 @dataclass
 class TextureProperty:
