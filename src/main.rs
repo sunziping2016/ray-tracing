@@ -6,6 +6,7 @@
 use async_channel::Sender;
 use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
 use nalgebra::{SimdRealField, Vector3};
+use num_traits::Zero;
 use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_pcg::Pcg64;
@@ -109,7 +110,7 @@ where
     F::SimdBool: SimdBoolField<F>,
 {
     pub fn create_world<G: Rng>(rng: &mut G) -> Scene<F, R> {
-        let mut scene = Scene::new(Vector3::new(1f32, 1f32, 1f32));
+        let mut scene = Scene::new(Vector3::new(1f32, 1f32, 1f32), Zero::zero());
         scene.add(
             Arc::new(Sphere::new(Vector3::new(0f32, -1000f32, 0f32), 1000f32)),
             Arc::new(Lambertian::new(Checker::new(

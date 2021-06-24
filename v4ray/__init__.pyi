@@ -10,7 +10,8 @@ from . import material
 from . import texture
 
 class Scene:
-    def __new__(cls, background: Tuple[float, float, float]) -> Scene: ...
+    def __new__(cls, background: Tuple[float, float, float],
+                environment: Tuple[float, float, float]) -> Scene: ...
     def add(self, shape: ShapeLike, material: MaterialLike) -> None: ...
 
 

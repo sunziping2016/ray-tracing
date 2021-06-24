@@ -1,6 +1,6 @@
 /target
 /data/output.jpeg
 /venv/
-/.mypy_cache/
+.mypy_cache
 __pycache__
 /raw_ui_mainwindow.py

@@ -11,7 +11,7 @@ use crate::{SimdBoolField, SimdF32Field};
 use arrayvec::ArrayVec;
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector2, Vector3};
-use num_traits::{cast, clamp, Zero};
+use num_traits::{cast, clamp};
 use numpy::PyArray;
 use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::{IntoPy, PyObject, PyResult, Python};
@@ -107,7 +107,7 @@ where
         F::SimdBool: From<[bool; F::LANES]>,
     {
         if depth == 0 {
-            return vec![Zero::zero(); rays.len()];
+            return vec![Vector3::splat(self.scene.environment()); rays.len()];
         }
         let mut hit_shapes: Vec<(Vec<usize>, Vec<Ray<f32>>)> =
             vec![(Vec::new(), Vec::new()); self.scene.len()];

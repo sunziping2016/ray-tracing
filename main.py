@@ -1,9 +1,12 @@
 import asyncio
 import copy
 import json
+import os
+import pickle
 import sys
+import typing
 from asyncio import AbstractEventLoop
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
 from threading import Thread
 from typing import Optional, Union, List, Dict, TypeVar, Any, Tuple, \
@@ -12,13 +15,13 @@ from uuid import UUID, uuid4
 
 import numpy as np
 from PyQt5 import QtCore
-from PyQt5.QtCore import Qt, QObject, QSize, QTimer
+from PyQt5.QtCore import Qt, QObject, QSize, QTimer, QStandardPaths
 from PyQt5.QtGui import QPixmap, QImage, QResizeEvent, QGuiApplication, \
     QDoubleValidator, QColor, QIntValidator
 from PyQt5.QtWidgets import QMainWindow, QApplication, QTreeWidgetItem, \
     QLayoutItem, QLabel, QLineEdit, QFormLayout, QWidgetItem, QLayout, \
     QListWidgetItem, QPushButton, QHBoxLayout, QColorDialog, QTabWidget, \
-    QComboBox, QFileDialog, QMessageBox
+    QComboBox, QFileDialog, QMessageBox, QWidget, QSizePolicy, QAction
 
 import v4ray
 import v4ray_frontend
@@ -1006,7 +1009,7 @@ class State:
     ) -> None:
         curr_key_set = set(curr)
         prev_key_map = {v: j for j, v in enumerate(prev)}
-        prev_keys = prev
+        prev_keys = prev[:]
         for i, key in reversed(list(enumerate(prev))):
             if key not in curr_key_set:
                 on_remove(i)
@@ -1080,7 +1083,7 @@ class State:
         if current_form is not None:
             widgets = current_form[1].apply(on_new_state, parent)
             for label, f in widgets:
-                shape_layout.addRow(label, f)  # type: ignore
+                layout.addRow(label, f)
 
     def apply(self, window: 'MainWindow') -> None:
         blocks: List[QObject] = [
@@ -1304,8 +1307,9 @@ class State:
                                                          textures)
             else:
                 materials[uuid] = mat_type.apply(mat.material[1], textures)
-        scene = Scene(background=ColorProperty.map_color(
-            self.renderer.background))
+        scene = Scene(
+            background=ColorProperty.map_color(self.renderer.background),
+            environment=(1.0, 1.0, 1.0) if preview else (0.0, 0.0, 0.0))
         for uuid in self.rendered_objects:
             obj = self.objects[uuid]
             assert isinstance(obj, ObjectData)
@@ -1315,18 +1319,70 @@ class State:
         assert self.camera is not None
         camera = self.camera_types[self.camera[0]].apply(self.camera[1])
         renderer = RendererParam(self.renderer.width, self.renderer.height,
-                                 2 if preview else self.renderer.max_depth,
+                                 1 if preview else self.renderer.max_depth,
                                  not preview)
         return renderer, camera, scene
 
+    def to_pickle(self) -> Dict[str, Any]:
+        return {
+            'root_objects': self.root_objects,
+            'objects': self.objects,
+            'shape_types': self.shape_types,
+            'root_textures': self.root_textures,
+            'textures': self.textures,
+            'texture_types': self.texture_types,
+            'root_materials': self.root_materials,
+            'materials': self.materials,
+            'material_types': self.material_types,
+            'camera': self.camera,
+            'camera_types': self.camera_types,
+            'renderer': self.renderer,
+        }
+
+    @staticmethod
+    def from_pickle(data: Dict[str, Any]) -> 'State':
+        state = State()
+        state.root_objects = data['root_objects']
+        state.objects = data['objects']
+        state.shape_types = data['shape_types']
+        state.root_textures = data['root_textures']
+        state.textures = data['textures']
+        state.texture_types = data['texture_types']
+        state.root_materials = data['root_materials']
+        state.materials = data['materials']
+        state.material_types = data['material_types']
+        state.camera = data['camera']
+        state.camera_types = data['camera_types']
+        state.renderer = data['renderer']
+        return State(state)
+
+
+@dataclass
+class HistoryItem:
+    state: 'State'
+    name: str
+    parent: int
+    child: int
+
+    def to_pickle(self) -> List[Any]:
+        return [self.state.to_pickle(), self.name, self.parent, self.child]
+
+    @staticmethod
+    def from_pickle(data: List[Any]) -> 'HistoryItem':
+        return HistoryItem(
+            state=State.from_pickle(data[0]),
+            name=data[1], parent=data[2], child=data[3])
+
 
 class MainWindow(QMainWindow):
-    ui: Ui_MainWindow
-    state: State
-    loop: AbstractEventLoop
     render_result = QtCore.pyqtSignal(np.ndarray)
+    ui: Ui_MainWindow
+    loop: AbstractEventLoop
 
+    state: State
     filename: Optional[str]
+    history: typing.OrderedDict[int, HistoryItem]
+    current_history: int
 
     def __init__(self, loop: AbstractEventLoop) -> None:
         super(MainWindow, self).__init__()
@@ -1334,13 +1390,30 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         # state
-        self.state = State() \
-            .with_more_shapes(v4ray_frontend.shapes) \
-            .with_more_textures(v4ray_frontend.textures) \
-            .with_more_materials(v4ray_frontend.materials) \
-            .with_more_cameras(v4ray_frontend.cameras)
-        self.state.apply(self)
-        self.filename = None
+        folder = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+        os.makedirs(folder, exist_ok=True)
+        self.workspace_path = os.path.join(folder, 'workspace.pkl')
+        self.load_workspace()
+        # undo redo
+
+        def move_history_parent() -> None:
+            parent = self.history[self.current_history].parent
+            if parent >= 0:
+                self.history[parent].child = self.current_history
+                self.move_history(parent)
+        self.ui.undo.triggered.connect(lambda _: move_history_parent())
+        self.addAction(self.ui.undo)
+        self.ui.redo.triggered.connect(
+            lambda x: self.move_history(
+                self.history[self.current_history].child))
+        self.addAction(self.ui.redo)
+        clear_unreachable = QAction('删除不可达记录', self)
+        clear_unreachable.triggered.connect(
+            lambda x: self.clear_unreachable_history())
+        self.ui.history.addAction(clear_unreachable)
+        clear_other = QAction('删除其他记录', self)
+        clear_other.triggered.connect(lambda x: self.clear_other())
+        self.ui.history.addAction(clear_other)
         # signals
         old_handle_resize_event = self.ui.image.resizeEvent
 
@@ -1408,6 +1481,8 @@ class MainWindow(QMainWindow):
                      self.ui.dockMaterial, self.ui.dockCamera,
                      self.ui.dockOperation]:
             self.ui.viewMenu.addAction(dock.toggleViewAction())
+        self.ui.history.currentRowChanged.connect(
+            lambda i: self.move_history(list(self.history.keys())[i]))
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         # self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
@@ -1416,17 +1491,175 @@ class MainWindow(QMainWindow):
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
 
-    def update_window_title(self):
+    def load_workspace(self) -> None:
+        try:
+            with open(self.workspace_path, 'rb') as f:
+                data = pickle.load(f)
+            self.filename = data['filename']
+            self.history = OrderedDict([(k, HistoryItem.from_pickle(v))
+                                        for k, v in data['history'].items()])
+            self.current_history = data['current_history']
+            self.ui.history.blockSignals(True)
+            self.ui.history.clear()
+            for index in self.history.keys():
+                item, widget = self.history_widget(index)
+                self.ui.history.addItem(item)
+                self.ui.history.setItemWidget(item, widget)
+            self.ui.history.setCurrentRow(
+                list(self.history.keys()).index(self.current_history))
+            self.ui.history.blockSignals(False)
+            self.state = self.history[self.current_history].state
+            self.state.apply(self)
+        except IOError:
+            self.filename = None
+            self.history = OrderedDict()
+            self.current_history = -1
+            self.state = State() \
+                .with_more_shapes(v4ray_frontend.shapes) \
+                .with_more_textures(v4ray_frontend.textures) \
+                .with_more_materials(v4ray_frontend.materials) \
+                .with_more_cameras(v4ray_frontend.cameras)
+            self.set_state(state=self.state, action='初始状态')
+
+    def save_workspace(self) -> None:
+        with open(self.workspace_path, 'wb') as f:
+            data = {
+                'history': OrderedDict([(k, v.to_pickle())
+                                        for k, v in self.history.items()]),
+                'current_history': self.current_history,
+                'filename': self.filename,
+            }
+            pickle.dump(data, f)
+
+    def history_widget(self, index: int) -> Tuple[QListWidgetItem, QWidget]:
+        widget = QWidget()
+        layout = QHBoxLayout()
+        history = self.history[index]
+        old_index = history.parent
+        name = history.name
+        if old_index >= 0:
+            label = QLabel(f'#{index + 1} ← #{old_index + 1}: {name}')
+        else:
+            label = QLabel(f'#{index + 1}: {name}')
+        label.setSizePolicy(QSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed))
+        layout.addWidget(label)
+        remove = QPushButton('×')
+        remove.setFixedSize(QSize(23, 23))
+        remove.setStyleSheet('QPushButton:enabled { color: red; }')
+
+        def on_remove() -> None:
+            self.ui.history.blockSignals(True)
+            self.ui.history.takeItem(list(self.history.keys()).index(index))
+            data = self.history.pop(index)
+            for i, (key, value) in enumerate(self.history.items()):
+                if value.parent == index:
+                    value.parent = data.parent
+                    label2 = self.ui.history.itemWidget(
+                        self.ui.history.item(i)).layout().itemAt(0).widget()
+                    label2.setText(f'#{key + 1} ← #{value.parent + 1}: '
+                                   f'{value.name}')
+                if value.child == index:
+                    value.child = data.child
+            self.ui.history.blockSignals(False)
+            if self.current_history == index:
+                self.move_history(data.parent)
+            self.save_workspace()
+        remove.setEnabled(index != 0)
+        remove.clicked.connect(lambda _: on_remove())
+        layout.addWidget(remove)
+        layout.setContentsMargins(2, 2, 2, 2)
+        widget.setLayout(layout)
+        item = QListWidgetItem()
+        item.setSizeHint(widget.sizeHint())
+        return item, widget
+
+    def move_history(self, index: int) -> None:
+        if index < 0:
+            return
+        self.current_history = index
+        self.ui.history.blockSignals(True)
+        self.ui.history.setCurrentRow(list(self.history.keys()).index(index))
+        self.ui.history.blockSignals(False)
+        self.set_state(self.history[index].state)
+
+    def insert_history(self, state: State, name: str) -> None:
+        index = 0 if not self.history else list(self.history.keys())[-1] + 1
+        self.history[index] = HistoryItem(state, name, self.current_history, -1)
+        old_index = self.current_history
+        if old_index >= 0:
+            self.history[old_index].child = index
+        self.current_history = index
+        self.ui.history.blockSignals(True)
+        item, widget = self.history_widget(index)
+        self.ui.history.addItem(item)
+        self.ui.history.setItemWidget(item, widget)
+        self.ui.history.setCurrentRow(len(self.history) - 1)
+        self.ui.history.blockSignals(False)
+
+    def clear_unreachable_history(self) -> None:
+        assert self.current_history >= 0
+        if QMessageBox.question(
+                self, '确认', '删除不可达历史记录是不可以恢复的，确认继续么？'
+        ) != QMessageBox.Yes:
+            return
+        reachable = {self.current_history}
+        history = self.current_history
+        while history >= 0:
+            history = self.history[history].parent
+            reachable.add(history)
+        history = self.current_history
+        while history >= 0:
+            history = self.history[history].child
+            reachable.add(history)
+        self.ui.history.blockSignals(True)
+        for row, index in reversed(list(enumerate(self.history.keys()))):
+            if index not in reachable:
+                self.ui.history.takeItem(row)
+        self.history = OrderedDict([(k, v) for k, v in self.history.items()
+                                    if k in reachable])
+        self.ui.history.setCurrentRow(list(self.history.keys())
+                                      .index(self.current_history))
+        self.ui.history.blockSignals(False)
+        self.save_workspace()
+
+    def clear_other(self) -> None:
+        if QMessageBox.question(
+                self, '确认', '删除其他历史记录是不可以恢复的，确认继续么？'
+        ) != QMessageBox.Yes:
+            return
+        assert self.current_history >= 0
+        self.ui.history.blockSignals(True)
+        for row, index in reversed(list(enumerate(self.history.keys()))):
+            if index != self.current_history and index != 0:
+                self.ui.history.takeItem(row)
+        history = self.history[self.current_history]
+        history.child = -1
+        if self.current_history > 0:
+            history.parent = 0
+            self.current_history = 1
+            self.history = OrderedDict([(0, self.history[0]), (1, history)])
+            label = self.ui.history.itemWidget(self.ui.history.item(1)) \
+                .layout().itemAt(0).widget()
+            label.setText(f'#2 ← #1: {history.name}')
+            self.ui.history.setCurrentRow(1)
+        else:
+            history.parent = -1
+            self.history = OrderedDict([(0, self.history[0])])
+            self.ui.history.setCurrentRow(0)
+        self.ui.history.blockSignals(False)
+        self.save_workspace()
+
+    def update_window_title(self) -> None:
         if self.filename is not None:
             self.setWindowTitle('渲染大作业 By Sun - ' + self.filename)
         else:
             self.setWindowTitle('渲染大作业 By Sun')
 
-    def about(self):
+    def about(self) -> None:
         QMessageBox.about(self, self.windowTitle(),
                           f'软件版本：v{__version__}\n开发者：me@szp.io')
 
-    def open(self):
+    def open(self) -> None:
         filename = QFileDialog.getOpenFileName(
             self, caption='保存项目', filter="v4ray 工程文件 (*.json)",
             options=QFileDialog.DontUseNativeDialog)[0]
@@ -1434,7 +1667,9 @@ class MainWindow(QMainWindow):
             self.filename = filename
             self.update_window_title()
             with open(self.filename) as f:
-                self.set_state(self.state.with_from_json(json.load(f)))
+                self.set_state(
+                    self.state.with_from_json(json.load(f)),
+                    f'打开 {os.path.basename(filename)}')
 
     def save(self) -> None:
         if self.filename is not None:
@@ -1454,16 +1689,18 @@ class MainWindow(QMainWindow):
                 json.dump(self.state.to_json(self.filename), f)
 
     def render_background_set(self) -> None:
+        initial = QColor(*self.state.renderer.background)
         color = QColorDialog.getColor(
-            initial=QColor(*self.state.renderer.background),
-            parent=self, title='渲染背景色',
+            initial=initial, parent=self, title='渲染背景色',
             options=QColorDialog.DontUseNativeDialog)
 
         def modify(renderer: RendererData) -> None:
             renderer.background = color.red(), color.green(), color.blue()
 
-        if color.isValid():
-            self.set_state(self.state.with_modify_renderer(modify))
+        if color.isValid() and color != initial:
+            self.set_state(
+                self.state.with_modify_renderer(modify),
+                f'设置渲染背景色为 {color.name()}')
 
     @QtCore.pyqtSlot(np.ndarray)
     def render_result_available(self, data: np.ndarray) -> None:
@@ -1480,22 +1717,28 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, trigger)
 
     def renderer_width_changed(self) -> None:
+        width = int(self.ui.renderWidth.text())
         def modify(renderer: RendererData) -> None:
-            renderer.width = int(self.ui.renderWidth.text())
-
-        self.set_state(self.state.with_modify_renderer(modify))
+            renderer.width = width
+        if self.state.renderer.width != width:
+            self.set_state(self.state.with_modify_renderer(modify),
+                           f'设置图像宽度为 {self.ui.renderWidth.text()}')
 
     def renderer_height_changed(self) -> None:
+        height = int(self.ui.renderHeight.text())
         def modify(renderer: RendererData) -> None:
-            renderer.height = int(self.ui.renderHeight.text())
-
-        self.set_state(self.state.with_modify_renderer(modify))
+            renderer.height = height
+        if self.state.renderer.height != height:
+            self.set_state(self.state.with_modify_renderer(modify),
+                           f'设置图像高度为 {self.ui.renderHeight.text()}')
 
     def renderer_max_depth_changed(self) -> None:
+        max_depth = int(self.ui.renderMaxDepth.text())
         def modify(renderer: RendererData) -> None:
-            renderer.max_depth = int(self.ui.renderMaxDepth.text())
-
-        self.set_state(self.state.with_modify_renderer(modify))
+            renderer.max_depth = max_depth
+        if self.state.renderer.max_depth != max_depth:
+            self.set_state(self.state.with_modify_renderer(modify),
+                           f'设置渲染最大深度为 {self.ui.renderMaxDepth.text()}')
 
     def goto_texture(self, uuid: UUID) -> None:
         self.ui.dockTexture.raise_()
@@ -1514,10 +1757,16 @@ class MainWindow(QMainWindow):
             shape_data = obj.shape[1]
             shape_data[index] = data
             obj.shape = obj.shape[0], shape_data
-
         assert self.state.current_object
-        self.set_state(self.state.with_modify_object(
-            self.state.current_object, modify))
+        name = self.state.object_names[self.state.current_object]
+        obj = self.state.objects[self.state.current_object]
+        assert isinstance(obj, ObjectData) and obj.shape is not None
+        field_name = self.state.shape_types[obj.shape[0]].properties()[index]
+        if obj.shape[1][index] != data:
+            self.set_state(
+                self.state.with_modify_object(
+                    self.state.current_object, modify),
+                f'修改对象 {name} 的形状 {field_name}')
 
     def texture_form_changed(self, index: int, data: Any) -> None:
         def modify(text: TextureData) -> None:
@@ -1525,10 +1774,16 @@ class MainWindow(QMainWindow):
             texture_data = text.texture[1]
             texture_data[index] = data
             text.texture = text.texture[0], texture_data
-
         assert self.state.current_texture
-        self.set_state(self.state.with_modify_texture(
-            self.state.current_texture, modify))
+        name = self.state.texture_names[self.state.current_texture]
+        t = self.state.textures[self.state.current_texture]
+        assert t.texture is not None
+        field_name = self.state.texture_types[t.texture[0]].properties()[index]
+        if t.texture[1][index] != data:
+            self.set_state(
+                self.state.with_modify_texture(
+                    self.state.current_texture, modify),
+                f'修改质地 {name} 的 {field_name}')
 
     def material_form_changed(self, index: int, data: Any) -> None:
         def modify(mat: MaterialData) -> None:
@@ -1536,10 +1791,17 @@ class MainWindow(QMainWindow):
             material_data = mat.material[1]
             material_data[index] = data
             mat.material = mat.material[0], material_data
-
         assert self.state.current_material
-        self.set_state(self.state.with_modify_material(
-            self.state.current_material, modify))
+        name = self.state.material_names[self.state.current_material]
+        m = self.state.materials[self.state.current_material]
+        assert m.material is not None
+        field_name = self.state.material_types[m.material[0]] \
+            .properties()[index]
+        if m.material[1][index] != data:
+            self.set_state(
+                self.state.with_modify_material(
+                    self.state.current_material, modify),
+                f'修改材料 {name} 的 {field_name}')
 
     def camera_form_changed(self, index: int, data: Any) -> None:
         def modify(
@@ -1548,35 +1810,51 @@ class MainWindow(QMainWindow):
             assert camera is not None
             camera[1][index] = data
             return camera
-
-        self.set_state(self.state.with_modify_camera(modify))
+        camera = self.state.camera
+        assert camera is not None
+        field_name = self.state.camera_types[camera[0]].properties()[index]
+        if camera[1][index] != data:
+            self.set_state(
+                self.state.with_modify_camera(modify),
+                f'修改相机的 {field_name}')
 
     def object_add(self, group: bool) -> None:
-        self.set_state(self.state.with_add_object(group=group))
+        self.set_state(
+            self.state.with_add_object(group=group),
+            '添加对象组' if group else '添加对象')
 
     def texture_add(self) -> None:
-        self.set_state(self.state.with_add_texture())
+        self.set_state(self.state.with_add_texture(), '添加质地')
 
     def material_add(self) -> None:
-        self.set_state(self.state.with_add_material())
+        self.set_state(self.state.with_add_material(), '添加材料')
 
     def object_remove(self) -> None:
         widget = self.ui.objectTree.currentItem()
         assert widget
-        self.set_state(self.state.with_remove_object(
-            UUID(widget.data(0, Qt.UserRole))))
+        uuid = UUID(widget.data(0, Qt.UserRole))
+        name = self.state.object_names[uuid]
+        self.set_state(
+            self.state.with_remove_object(uuid),
+            f'删除对象(组) {name}')
 
     def texture_remove(self) -> None:
         widget = self.ui.textureList.currentItem()
         assert widget
-        self.set_state(self.state.with_remove_texture(
-            UUID(widget.data(Qt.UserRole))))
+        uuid = UUID(widget.data(Qt.UserRole))
+        name = self.state.texture_names[uuid]
+        self.set_state(
+            self.state.with_remove_texture(uuid),
+            f'删除质地 {name}')
 
     def material_remove(self) -> None:
         widget = self.ui.materialList.currentItem()
         assert widget
-        self.set_state(self.state.with_remove_material(
-            UUID(widget.data(Qt.UserRole))))
+        uuid = UUID(widget.data(Qt.UserRole))
+        name = self.state.material_names[uuid]
+        self.set_state(
+            self.state.with_remove_material(uuid),
+            f'删除材料 {name}')
 
     def object_shape_changed(self) -> None:
         text = self.ui.objectShape.lineEdit().text()
@@ -1596,8 +1874,9 @@ class MainWindow(QMainWindow):
 
         def update_state() -> None:
             assert self.state.current_object
+            name = self.state.object_names[self.state.current_object]
             self.set_state(self.state.with_modify_object(
-                self.state.current_object, modify))
+                self.state.current_object, modify), f'修改对象 {name} 的形状类型')
 
         QTimer.singleShot(0, update_state)
 
@@ -1608,6 +1887,9 @@ class MainWindow(QMainWindow):
                 list(self.state.material_names.values()).index(text)]
         except ValueError:
             uuid = None
+        assert self.state.current_object
+        if self.state.objects[self.state.current_object].material == uuid:
+            return
 
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
             assert isinstance(obj, ObjectData)
@@ -1615,8 +1897,9 @@ class MainWindow(QMainWindow):
 
         def update_state() -> None:
             assert self.state.current_object
+            name = self.state.object_names[self.state.current_object]
             self.set_state(self.state.with_modify_object(
-                self.state.current_object, modify))
+                self.state.current_object, modify), f'修改对象 {name} 的材料')
 
         QTimer.singleShot(0, update_state)
 
@@ -1637,8 +1920,9 @@ class MainWindow(QMainWindow):
 
         def update_state() -> None:
             assert self.state.current_texture
+            name = self.state.texture_names[self.state.current_texture]
             self.set_state(self.state.with_modify_texture(
-                self.state.current_texture, modify))
+                self.state.current_texture, modify), f'修改质地 {name} 的类型')
 
         QTimer.singleShot(0, update_state)
 
@@ -1659,8 +1943,9 @@ class MainWindow(QMainWindow):
 
         def update_state() -> None:
             assert self.state.current_material
+            name = self.state.material_names[self.state.current_material]
             self.set_state(self.state.with_modify_material(
-                self.state.current_material, modify))
+                self.state.current_material, modify), f'修改材料 {name} 的类型')
 
         QTimer.singleShot(0, update_state)
 
@@ -1681,7 +1966,8 @@ class MainWindow(QMainWindow):
                           self.state.camera_types[camera].properties()])
 
         def update_state() -> None:
-            self.set_state(self.state.with_modify_camera(modify))
+            self.set_state(self.state.with_modify_camera(modify),
+                           '修改相机的类型')
 
         QTimer.singleShot(0, update_state)
 
@@ -1690,32 +1976,44 @@ class MainWindow(QMainWindow):
             obj.name = self.ui.objectName_.text()
 
         assert self.state.current_object
+        name = self.state.object_names[self.state.current_object]
+        if name == self.ui.objectName_.text():
+            return
         self.set_state(self.state.with_modify_object(
-            self.state.current_object, modify))
+            self.state.current_object, modify), f'修改对象 {name} 的名字')
 
     def texture_name_changed(self) -> None:
         def modify(text: TextureData) -> None:
             text.name = self.ui.textureName.text()
 
         assert self.state.current_texture
+        name = self.state.texture_names[self.state.current_texture]
+        if name == self.ui.textureName.text():
+            return
         self.set_state(self.state.with_modify_texture(
-            self.state.current_texture, modify))
+            self.state.current_texture, modify), f'修改质地 {name} 的名字')
 
     def material_name_changed(self) -> None:
         def modify(mat: MaterialData) -> None:
             mat.name = self.ui.materialName.text()
 
         assert self.state.current_material
+        name = self.state.material_names[self.state.current_material]
+        if name == self.ui.materialName.text():
+            return
         self.set_state(self.state.with_modify_material(
-            self.state.current_material, modify))
+            self.state.current_material, modify), f'修改材料 {name} 的名字')
 
     def object_visible_changed(self, visible: bool) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
             obj.visible = visible
 
         assert self.state.current_object
+        name = self.state.object_names[self.state.current_object]
+        if self.state.objects[self.state.current_object].visible == visible:
+            return
         self.set_state(self.state.with_modify_object(
-            self.state.current_object, modify))
+            self.state.current_object, modify), f'修改对象 {name} 的可见性')
 
     def object_current_changed(self,
                                current: Optional[QTreeWidgetItem]) -> None:
@@ -1735,9 +2033,12 @@ class MainWindow(QMainWindow):
             UUID(current.data(Qt.UserRole))
             if current is not None else None))
 
-    def set_state(self, state: State) -> None:
+    def set_state(self, state: State, action: Optional[str] = None) -> None:
+        if action is not None:
+            self.insert_history(state, action)
         state.apply_diff(self.state, self)
         self.state = state
+        self.save_workspace()
 
 
 async def render(renderer: v4ray.Renderer,

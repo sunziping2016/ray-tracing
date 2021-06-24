@@ -4,6 +4,7 @@ use crate::material::py::to_material;
 use crate::py::{PyRng, PySimd, PyVector3};
 use crate::{BoxedHittable, BoxedMaterial};
 use nalgebra::Vector3;
+use num_traits::Zero;
 use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::{Py, PyAny, Python};
 use rand::Rng;
@@ -13,14 +14,16 @@ pub struct Scene<F, R: Rng> {
     hittables: Vec<BoxedHittable<F, R>>,
     materials: Vec<BoxedMaterial<F, R>>,
     background: Vector3<f32>,
+    environment: Vector3<f32>,
 }
 
 impl<F, R: Rng> Scene<F, R> {
-    pub fn new(background: Vector3<f32>) -> Self {
+    pub fn new(background: Vector3<f32>, environment: Vector3<f32>) -> Self {
         Self {
             hittables: Vec::new(),
             materials: Vec::new(),
             background,
+            environment,
         }
     }
     pub fn add(&mut self, hittable: BoxedHittable<F, R>, material: BoxedMaterial<F, R>) {
@@ -48,6 +51,9 @@ impl<F, R: Rng> Scene<F, R> {
     pub fn background(&self) -> Vector3<f32> {
         self.background
     }
+    pub fn environment(&self) -> Vector3<f32> {
+        self.environment
+    }
 }
 
 #[pyclass(name = "Scene")]
@@ -59,9 +65,12 @@ pub struct PyScene {
 impl PyScene {
     // TODO: iterable
     #[new]
-    pub fn py_new(background: PyVector3) -> Self {
+    pub fn py_new(background: PyVector3, environment: Option<PyVector3>) -> Self {
         Self {
-            inner: Scene::new(Vector3::new(background.0, background.1, background.2)),
+            inner: Scene::new(
+                Vector3::new(background.0, background.1, background.2),
+                environment.map_or(Zero::zero(), |(r, g, b)| Vector3::new(r, g, b)),
+            ),
         }
     }
     #[name = "add"]

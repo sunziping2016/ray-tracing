@@ -620,7 +620,7 @@
    <widget class="QWidget" name="contentOperation">
     <layout class="QVBoxLayout" name="verticalLayout_5">
      <item>
-      <widget class="QListWidget" name="operationList"/>
+      <widget class="QListWidget" name="history"/>
      </item>
     </layout>
    </widget>
