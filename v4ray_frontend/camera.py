@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 from asyncio import Protocol
-from typing import List, Any
+from typing import List, Any, Dict
 
 import v4ray
 from v4ray_frontend.properties import AnyProperty, FloatProperty
@@ -31,6 +31,16 @@ class CameraType(ABC):
     def apply(data: List[Any]) -> CameraLike:
         pass
 
+    @staticmethod
+    @abstractmethod
+    def to_json(data: List[Any]) -> Dict[str, Any]:
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def from_json(data: Dict[str, Any]) -> List[Any]:
+        pass
+
 
 class PerspectiveCamera(CameraType):
     @staticmethod
@@ -59,7 +69,7 @@ class PerspectiveCamera(CameraType):
     @staticmethod
     def validate(data: List[Any]) -> bool:
         return 0 < float(data[6]) < 180 and float(data[10]) >= 0 and \
-               float(data[11]) >= 0 and float(data[12]) <= float(data[13])
+               float(data[11]) > 0 and float(data[12]) <= float(data[13])
 
     @staticmethod
     def apply(data: List[Any]) -> CameraLike:
@@ -73,3 +83,35 @@ class PerspectiveCamera(CameraType):
             time0=data[12],
             time1=data[13]
         )
+
+    @staticmethod
+    def to_json(data: List[Any]) -> Dict[str, Any]:
+        return {
+            'look_from': [data[0], data[1], data[2]],
+            'look_at': [data[3], data[4], data[5]],
+            'vfov': data[6],
+            'up': [data[7], data[8], data[9]],
+            'aperture': data[10],
+            'focus_dist': data[11],
+            'time0': data[12],
+            'time1': data[13],
+        }
+
+    @staticmethod
+    def from_json(data: Dict[str, Any]) -> List[Any]:
+        return [
+            data['look_from'][0],
+            data['look_from'][1],
+            data['look_from'][2],
+            data['look_at'][0],
+            data['look_at'][1],
+            data['look_at'][2],
+            data['vfov'],
+            data['up'][0],
+            data['up'][1],
+            data['up'][2],
+            data['aperture'],
+            data['focus_dist'],
+            data['time0'],
+            data['time1'],
+        ]

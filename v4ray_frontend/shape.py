@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Any, Protocol
+from typing import List, Any, Protocol, Dict
 
 import numpy as np
 
@@ -34,6 +34,16 @@ class ShapeType(ABC):
     def apply(data: List[Any]) -> List[ShapeLike]:
         pass
 
+    @staticmethod
+    @abstractmethod
+    def to_json(data: List[Any]) -> Dict[str, Any]:
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def from_json(data: Dict[str, Any]) -> List[Any]:
+        pass
+
 
 class Sphere(ShapeType):
     @staticmethod
@@ -62,3 +72,19 @@ class Sphere(ShapeType):
         assert isinstance(x, float) and isinstance(y, float) and \
                isinstance(z, float) and isinstance(radius, float)
         return [v4ray.shape.Sphere((x, y, z), radius)]
+
+    @staticmethod
+    def to_json(data: List[Any]) -> Dict[str, Any]:
+        return {
+            'center': [data[0], data[1], data[2]],
+            'radius': data[3]
+        }
+
+    @staticmethod
+    def from_json(data: Dict[str, Any]) -> List[Any]:
+        return [
+            data['center'][0],
+            data['center'][1],
+            data['center'][2],
+            data['radius']
+        ]

@@ -29,7 +29,6 @@ where
 impl SolidColor {
     #[new]
     pub fn py_new(color: PyVector3) -> Self {
-        println!("{:?}", color);
         Self {
             color: Vector3::new(color.0, color.1, color.2),
         }

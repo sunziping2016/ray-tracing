@@ -39,6 +39,16 @@ class MaterialType(ABC):
               textures: Dict[UUID, TextureLike]) -> MaterialLike:
         pass
 
+    @staticmethod
+    @abstractmethod
+    def to_json(data: List[Any]) -> Dict[str, Any]:
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def from_json(data: Dict[str, Any]) -> List[Any]:
+        pass
+
 
 class Lambertian(MaterialType):
     @staticmethod
@@ -64,3 +74,18 @@ class Lambertian(MaterialType):
     def apply(data: List[Any],
               textures: Dict[UUID, TextureLike]) -> MaterialLike:
         return v4ray.material.Lambertian(textures[data[0]])
+
+    @staticmethod
+    def to_json(data: List[Any]) -> Dict[str, Any]:
+        if data[0] is None:
+            return {}
+        return {
+            'texture': str(data[0])
+        }
+
+    @staticmethod
+    def from_json(data: Dict[str, Any]) -> List[Any]:
+        texture = data.get('texture')
+        return [
+            UUID(texture) if texture is not None else None,
+        ]

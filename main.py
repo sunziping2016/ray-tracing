@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 from asyncio import AbstractEventLoop
 from collections import defaultdict
@@ -17,7 +18,7 @@ from PyQt5.QtGui import QPixmap, QImage, QResizeEvent, QGuiApplication, \
 from PyQt5.QtWidgets import QMainWindow, QApplication, QTreeWidgetItem, \
     QLayoutItem, QLabel, QLineEdit, QFormLayout, QWidgetItem, QLayout, \
     QListWidgetItem, QPushButton, QHBoxLayout, QColorDialog, QTabWidget, \
-    QComboBox
+    QComboBox, QFileDialog, QMessageBox
 
 import v4ray
 import v4ray_frontend
@@ -29,6 +30,8 @@ from v4ray_frontend.texture import TextureType, TextureLike
 from v4ray_frontend.properties import AnyProperty, FloatProperty, \
     ColorProperty, TextureProperty
 from v4ray_frontend.shape import ShapeType
+
+__version__ = '0.1.0-rc.1'
 
 T = TypeVar('T')
 
@@ -137,6 +140,7 @@ class FormState:
                         options=QColorDialog.DontUseNativeDialog)
                     if c.isValid():
                         on_new_state(i, (c.red(), c.green(), c.blue()))
+
                 button.clicked.connect(lambda x: color_picker())
                 layout.addWidget(button)
                 layout.addStretch(1)
@@ -199,6 +203,7 @@ class FormState:
                         options=QColorDialog.DontUseNativeDialog)
                     if c.isValid():
                         on_new_state(i, (c.red(), c.green(), c.blue()))
+
                 button.clicked.disconnect()
                 button.clicked.connect(lambda x: color_picker())
             elif isinstance(p, TextureProperty):
@@ -390,6 +395,7 @@ class State:
                     self.objects_inherited_materials[obj.key] = new_inherited
                 if isinstance(obj, ObjectListData):
                     object_traversal(obj.children, new_inherited)
+
         object_traversal(self.root_objects, None)
         for uuid, obj in self.objects.items():
             if isinstance(obj, ObjectData) and \
@@ -414,6 +420,7 @@ class State:
                     object_traversal2(obj.children)
                 else:
                     self.visible_objects.add(uuid)
+
         object_traversal2(self.root_objects)
         self.rendered_objects = self.visible_objects & self.valid_objects
         self.rendered_materials = set()
@@ -444,6 +451,142 @@ class State:
                     if uuid2 not in self.rendered_textures:
                         self.rendered_textures.add(uuid2)
                         stack.append(uuid2)
+
+    def to_json(self, _path: str) -> Dict[str, Any]:
+        # noinspection PyDictCreation
+        data: Dict[str, Any] = {}
+        data['render'] = {
+            'width': self.renderer.width,
+            'height': self.renderer.height,
+            'max_depth': self.renderer.max_depth,
+            'background': '#%02x%02x%02x' % self.renderer.background,
+        }
+        if self.camera is not None:
+            # noinspection PyDictCreation
+            camera: Dict[str, Any] = {}
+            camera['type'] = self.camera[0]
+            camera.update(self.camera_types[self.camera[0]]
+                          .to_json(self.camera[1]))
+            data['camera'] = camera
+        data['root_objects'] = [str(o) for o in self.root_objects]
+        objects: Dict[str, Any] = {}
+        for u, o in self.objects.items():
+            # noinspection PyDictCreation
+            obj: Dict[str, Any] = {}
+            obj['name'] = o.name
+            obj['visible'] = o.visible
+            if o.material is not None:
+                obj['material'] = str(o.material)
+            if isinstance(o, ObjectData):
+                if o.shape is not None:
+                    # noinspection PyDictCreation
+                    shape: Dict[str, Any] = {}
+                    shape['type'] = o.shape[0]
+                    shape.update(
+                        self.shape_types[o.shape[0]].to_json(o.shape[1]))
+                    obj['shape'] = shape
+            else:
+                obj['children'] = [str(c) for c in o.children]
+            objects[str(u)] = obj
+        data['objects'] = objects
+        materials: Dict[str, Any] = {}
+        for u in self.root_materials:
+            m = self.materials[u]
+            # noinspection PyDictCreation
+            material: Dict[str, Any] = {}
+            material['name'] = m.name
+            if m.material is not None:
+                material['type'] = m.material[0]
+                material.update(self.material_types[m.material[0]]
+                                .to_json(m.material[1]))
+            materials[str(u)] = material
+        data['materials'] = materials
+        textures: Dict[str, Any] = {}
+        for u in self.root_textures:
+            text = self.textures[u]
+            # noinspection PyDictCreation
+            texture: Dict[str, Any] = {}
+            texture['name'] = text.name
+            if text.texture is not None:
+                texture['type'] = text.texture[0]
+                texture.update(self.texture_types[text.texture[0]]
+                               .to_json(text.texture[1]))
+            textures[str(u)] = texture
+        data['textures'] = textures
+        return data
+
+    def with_from_json(self, data: Dict[str, Any]) -> 'State':
+        state: 'State' = copy.deepcopy(self)
+        state.render_result = None
+        state.root_objects = [UUID(o) for o in data['root_objects']]
+        state.current_object = None
+        state.objects = {}
+        for u, o in data['objects'].items():
+            if 'children' in o:
+                material = o.get('material')
+                state.objects[UUID(u)] = ObjectListData(
+                    name=o['name'],
+                    material=UUID(material) if material is not None else None,
+                    children=[UUID(c) for c in o['children']],
+                    visible=o['visible'],
+                )
+            else:
+                material = o.get('material')
+                shape = o.get('shape')
+                if shape is not None:
+                    shape_result: Optional[Tuple[str, List[Any]]] = \
+                        shape['type'], \
+                        state.shape_types[shape['type']].from_json(shape)
+                else:
+                    shape_result = None
+                state.objects[UUID(u)] = ObjectData(
+                    name=o['name'],
+                    shape=shape_result,
+                    material=UUID(material) if material is not None else None,
+                    visible=o['visible'],
+                )
+            state.objects[UUID(u)].key = UUID(u)
+        state.root_textures = [UUID(t) for t in data['textures']]
+        state.current_texture = None
+        for u, t in data['textures'].items():
+            text = t.get('type')
+            if text is not None:
+                text_result: Optional[Tuple[str, List[Any]]] = \
+                    text, state.texture_types[text].from_json(t)
+            else:
+                text_result = None
+            state.textures[UUID(u)] = TextureData(
+                name=t['name'], texture=text_result)
+            state.textures[UUID(u)].key = UUID(u)
+        state.root_materials = [UUID(t) for t in data['materials']]
+        state.current_material = None
+        for u, m in data['materials'].items():
+            mat = m.get('type')
+            if mat is not None:
+                mat_result: Optional[Tuple[str, List[Any]]] = \
+                    mat, state.material_types[mat].from_json(m)
+            else:
+                mat_result = None
+            state.materials[UUID(u)] = MaterialData(
+                name=m['name'], material=mat_result)
+            state.materials[UUID(u)].key = UUID(u)
+        if 'camera' in data:
+            camera = data['camera']
+            state.camera = \
+                camera['type'], \
+                state.camera_types[camera['type']].from_json(camera)
+        else:
+            state.camera = None
+        render = data['render']
+        background = render['background']
+        state.renderer = RendererData(
+            width=render['width'],
+            height=render['height'],
+            max_depth=render['max_depth'],
+            background=(int(background[1:3], 16), int(background[3:5], 16),
+                        int(background[5:7], 16)),
+        )
+        return State(state)
 
     def object_uuid_to_widget(
             self, window: 'MainWindow', uuid: UUID
@@ -554,6 +697,7 @@ class State:
             if isinstance(obj, ObjectListData):
                 for child in obj.children:
                     recursive_remove(child)
+
         parent, index = self.object_parent[uuid]
         if parent is not None and index != 0:
             parent_object = state.objects[parent]
@@ -727,7 +871,7 @@ class State:
         if not self.current_texture:
             window.ui.textureType.setEnabled(False)
             window.ui.textureType.lineEdit().setText('')
-            window.ui.textureList.setCurrentItem(None)   # type: ignore
+            window.ui.textureList.setCurrentItem(None)  # type: ignore
             window.ui.textureName.setEnabled(False)
             window.ui.textureName.setText('')
         else:
@@ -744,7 +888,7 @@ class State:
         if not self.current_material:
             window.ui.materialType.setEnabled(False)
             window.ui.materialType.lineEdit().setText('')
-            window.ui.materialList.setCurrentItem(None)   # type: ignore
+            window.ui.materialList.setCurrentItem(None)  # type: ignore
             window.ui.materialName.setEnabled(False)
             window.ui.materialName.setText('')
         else:
@@ -795,7 +939,7 @@ class State:
         name = self.object_names[item.key]
         if isinstance(item, ObjectData):
             name += ' ' + \
-                   ('✓' if item.key in self.valid_objects else '✗')
+                    ('✓' if item.key in self.valid_objects else '✗')
         else:
             name += ' (组)'
         if item.visible:
@@ -904,6 +1048,7 @@ class State:
             widget.insertChild(
                 i, self.apply_object_tree_item(self.objects[child_key]))
             widget.setExpanded(True)
+
         prev_item = prev_state.objects[key]
         curr_item = self.objects[key]
         if isinstance(prev_item, ObjectData) or \
@@ -1146,6 +1291,7 @@ class State:
                 if isinstance(p, TextureProperty):
                     generate_texture(text.texture[1][i])
             textures[uuid] = texture_type.apply(text.texture[1], textures)
+
         for uuid in self.rendered_textures:
             generate_texture(uuid)
         materials: Dict[UUID, MaterialLike] = {}
@@ -1180,6 +1326,8 @@ class MainWindow(QMainWindow):
     loop: AbstractEventLoop
     render_result = QtCore.pyqtSignal(np.ndarray)
 
+    filename: Optional[str]
+
     def __init__(self, loop: AbstractEventLoop) -> None:
         super(MainWindow, self).__init__()
         self.loop = loop
@@ -1191,8 +1339,8 @@ class MainWindow(QMainWindow):
             .with_more_textures(v4ray_frontend.textures) \
             .with_more_materials(v4ray_frontend.materials) \
             .with_more_cameras(v4ray_frontend.cameras)
-
         self.state.apply(self)
+        self.filename = None
         # signals
         old_handle_resize_event = self.ui.image.resizeEvent
 
@@ -1205,6 +1353,7 @@ class MainWindow(QMainWindow):
                     self.ui.image.height(),
                     Qt.KeepAspectRatio
                 ))
+
         self.ui.renderWidth.setValidator(QIntValidator(1, 3840))
         self.ui.renderHeight.setValidator(QIntValidator(1, 2160))
         self.ui.renderMaxDepth.setValidator(QIntValidator(1, 1000))
@@ -1251,6 +1400,14 @@ class MainWindow(QMainWindow):
         self.ui.renderBackground.clicked.connect(
             lambda _: self.render_background_set())
         self.render_result.connect(self.render_result_available)
+        self.ui.about.triggered.connect(lambda x: self.about())
+        self.ui.open.triggered.connect(lambda x: self.open())
+        self.ui.save.triggered.connect(lambda x: self.save())
+        self.ui.saveAs.triggered.connect(lambda x: self.save_as())
+        for dock in [self.ui.dockScene, self.ui.dockTexture,
+                     self.ui.dockMaterial, self.ui.dockCamera,
+                     self.ui.dockOperation]:
+            self.ui.viewMenu.addAction(dock.toggleViewAction())
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         # self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
@@ -1258,6 +1415,43 @@ class MainWindow(QMainWindow):
         self.ui.dockScene.raise_()
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
+
+    def update_window_title(self):
+        if self.filename is not None:
+            self.setWindowTitle('渲染大作业 By Sun - ' + self.filename)
+        else:
+            self.setWindowTitle('渲染大作业 By Sun')
+
+    def about(self):
+        QMessageBox.about(self, self.windowTitle(),
+                          f'软件版本：v{__version__}\n开发者：me@szp.io')
+
+    def open(self):
+        filename = QFileDialog.getOpenFileName(
+            self, caption='保存项目', filter="v4ray 工程文件 (*.json)",
+            options=QFileDialog.DontUseNativeDialog)[0]
+        if filename:
+            self.filename = filename
+            self.update_window_title()
+            with open(self.filename) as f:
+                self.set_state(self.state.with_from_json(json.load(f)))
+
+    def save(self) -> None:
+        if self.filename is not None:
+            with open(self.filename, 'w') as f:
+                json.dump(self.state.to_json(self.filename), f)
+        else:
+            self.save_as()
+
+    def save_as(self) -> None:
+        filename = QFileDialog.getSaveFileName(
+            self, caption='保存项目', filter="v4ray 工程文件 (*.json)",
+            options=QFileDialog.DontUseNativeDialog)[0]
+        if filename is not None:
+            self.filename = filename
+            self.update_window_title()
+            with open(self.filename, 'w') as f:
+                json.dump(self.state.to_json(self.filename), f)
 
     def render_background_set(self) -> None:
         color = QColorDialog.getColor(
@@ -1267,6 +1461,7 @@ class MainWindow(QMainWindow):
 
         def modify(renderer: RendererData) -> None:
             renderer.background = color.red(), color.green(), color.blue()
+
         if color.isValid():
             self.set_state(self.state.with_modify_renderer(modify))
 
@@ -1281,21 +1476,25 @@ class MainWindow(QMainWindow):
             asyncio.run_coroutine_threadsafe(
                 render(renderer, self.render_result),
                 self.loop)
+
         QTimer.singleShot(0, trigger)
 
     def renderer_width_changed(self) -> None:
         def modify(renderer: RendererData) -> None:
             renderer.width = int(self.ui.renderWidth.text())
+
         self.set_state(self.state.with_modify_renderer(modify))
 
     def renderer_height_changed(self) -> None:
         def modify(renderer: RendererData) -> None:
             renderer.height = int(self.ui.renderHeight.text())
+
         self.set_state(self.state.with_modify_renderer(modify))
 
     def renderer_max_depth_changed(self) -> None:
         def modify(renderer: RendererData) -> None:
             renderer.max_depth = int(self.ui.renderMaxDepth.text())
+
         self.set_state(self.state.with_modify_renderer(modify))
 
     def goto_texture(self, uuid: UUID) -> None:
@@ -1315,6 +1514,7 @@ class MainWindow(QMainWindow):
             shape_data = obj.shape[1]
             shape_data[index] = data
             obj.shape = obj.shape[0], shape_data
+
         assert self.state.current_object
         self.set_state(self.state.with_modify_object(
             self.state.current_object, modify))
@@ -1325,6 +1525,7 @@ class MainWindow(QMainWindow):
             texture_data = text.texture[1]
             texture_data[index] = data
             text.texture = text.texture[0], texture_data
+
         assert self.state.current_texture
         self.set_state(self.state.with_modify_texture(
             self.state.current_texture, modify))
@@ -1335,6 +1536,7 @@ class MainWindow(QMainWindow):
             material_data = mat.material[1]
             material_data[index] = data
             mat.material = mat.material[0], material_data
+
         assert self.state.current_material
         self.set_state(self.state.with_modify_material(
             self.state.current_material, modify))
@@ -1346,6 +1548,7 @@ class MainWindow(QMainWindow):
             assert camera is not None
             camera[1][index] = data
             return camera
+
         self.set_state(self.state.with_modify_camera(modify))
 
     def object_add(self, group: bool) -> None:
@@ -1395,6 +1598,7 @@ class MainWindow(QMainWindow):
             assert self.state.current_object
             self.set_state(self.state.with_modify_object(
                 self.state.current_object, modify))
+
         QTimer.singleShot(0, update_state)
 
     def object_material_change(self) -> None:
@@ -1413,6 +1617,7 @@ class MainWindow(QMainWindow):
             assert self.state.current_object
             self.set_state(self.state.with_modify_object(
                 self.state.current_object, modify))
+
         QTimer.singleShot(0, update_state)
 
     def texture_type_changed(self) -> None:
@@ -1434,6 +1639,7 @@ class MainWindow(QMainWindow):
             assert self.state.current_texture
             self.set_state(self.state.with_modify_texture(
                 self.state.current_texture, modify))
+
         QTimer.singleShot(0, update_state)
 
     def material_type_changed(self) -> None:
@@ -1455,6 +1661,7 @@ class MainWindow(QMainWindow):
             assert self.state.current_material
             self.set_state(self.state.with_modify_material(
                 self.state.current_material, modify))
+
         QTimer.singleShot(0, update_state)
 
     def camera_type_changed(self) -> None:
@@ -1475,11 +1682,13 @@ class MainWindow(QMainWindow):
 
         def update_state() -> None:
             self.set_state(self.state.with_modify_camera(modify))
+
         QTimer.singleShot(0, update_state)
 
     def object_name_changed(self) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
             obj.name = self.ui.objectName_.text()
+
         assert self.state.current_object
         self.set_state(self.state.with_modify_object(
             self.state.current_object, modify))
@@ -1487,6 +1696,7 @@ class MainWindow(QMainWindow):
     def texture_name_changed(self) -> None:
         def modify(text: TextureData) -> None:
             text.name = self.ui.textureName.text()
+
         assert self.state.current_texture
         self.set_state(self.state.with_modify_texture(
             self.state.current_texture, modify))
@@ -1494,6 +1704,7 @@ class MainWindow(QMainWindow):
     def material_name_changed(self) -> None:
         def modify(mat: MaterialData) -> None:
             mat.name = self.ui.materialName.text()
+
         assert self.state.current_material
         self.set_state(self.state.with_modify_material(
             self.state.current_material, modify))
@@ -1501,6 +1712,7 @@ class MainWindow(QMainWindow):
     def object_visible_changed(self, visible: bool) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:
             obj.visible = visible
+
         assert self.state.current_object
         self.set_state(self.state.with_modify_object(
             self.state.current_object, modify))
@@ -1541,7 +1753,7 @@ def async_loop(loop: AbstractEventLoop) -> None:
 
 def gui_loop(loop: AbstractEventLoop) -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName('renderer')
+    app.setApplicationName('v4ray')
 
     window = MainWindow(loop)
     window.show()

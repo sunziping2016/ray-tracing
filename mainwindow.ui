@@ -57,8 +57,37 @@
      <height>20</height>
     </rect>
    </property>
+   <widget class="QMenu" name="fileMenu">
+    <property name="title">
+     <string>文件</string>
+    </property>
+    <addaction name="open"/>
+    <addaction name="save"/>
+    <addaction name="saveAs"/>
+   </widget>
+   <widget class="QMenu" name="viewMenu">
+    <property name="title">
+     <string>视图</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="editMenu">
+    <property name="title">
+     <string>编辑</string>
+    </property>
+    <addaction name="undo"/>
+    <addaction name="redo"/>
+   </widget>
+   <widget class="QMenu" name="aboutMenu">
+    <property name="title">
+     <string>帮助</string>
+    </property>
+    <addaction name="about"/>
+   </widget>
+   <addaction name="fileMenu"/>
+   <addaction name="editMenu"/>
+   <addaction name="viewMenu"/>
+   <addaction name="aboutMenu"/>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
   <widget class="QDockWidget" name="dockScene">
    <property name="windowTitle">
     <string>对象树</string>
@@ -471,7 +500,7 @@
           <x>0</x>
           <y>0</y>
           <width>274</width>
-          <height>416</height>
+          <height>427</height>
          </rect>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_6">
@@ -596,6 +625,51 @@
     </layout>
    </widget>
   </widget>
+  <action name="open">
+   <property name="text">
+    <string>打开...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="save">
+   <property name="text">
+    <string>保存</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="saveAs">
+   <property name="text">
+    <string>另存为...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+S</string>
+   </property>
+  </action>
+  <action name="undo">
+   <property name="text">
+    <string>撤销</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
+  </action>
+  <action name="redo">
+   <property name="text">
+    <string>重做</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="about">
+   <property name="text">
+    <string>关于</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>
