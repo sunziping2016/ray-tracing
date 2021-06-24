@@ -243,7 +243,10 @@ class FormState:
 
 
 class State:
-    render_result: Optional[np.ndarray]
+    previewing: bool
+    preview_result: Optional[np.ndarray]
+    rendering: bool
+    render_result: Optional[Tuple[Type[np.ndarray], int]]
 
     root_objects: List[UUID]
     objects: Dict[UUID, Union[ObjectData, ObjectListData]]
@@ -290,6 +293,9 @@ class State:
             prev_state: Optional['State'] = None,
     ):
         if prev_state is None:
+            self.previewing = False
+            self.preview_result = None
+            self.rendering = False
             self.render_result = None
             self.root_objects = []
             self.objects = {}
@@ -310,6 +316,9 @@ class State:
                 width=800, height=600, max_depth=20,
                 background=(255, 255, 255))
         else:
+            self.previewing = prev_state.previewing
+            self.preview_result = prev_state.preview_result
+            self.rendering = prev_state.rendering
             self.render_result = prev_state.render_result
             self.root_objects = prev_state.root_objects
             self.objects = prev_state.objects
@@ -327,133 +336,233 @@ class State:
             self.camera = prev_state.camera
             self.camera_types = prev_state.camera_types
             self.renderer = prev_state.renderer
-        self.object_parent = {c: (k, i) for k, obj in self.objects.items()
-                              if isinstance(obj, ObjectListData)
-                              for i, c in enumerate(obj.children)}
-        for i, k in enumerate(self.root_objects):
-            self.object_parent[k] = None, i
-        names = State.calc_unique_name([self.textures[uuid].name
-                                        for uuid in self.root_textures])
-        self.texture_names = dict(zip(self.root_textures, names))
-        names = State.calc_unique_name([self.materials[uuid].name
-                                        for uuid in self.root_materials])
-        self.material_names = dict(zip(self.root_materials, names))
-        names = State.calc_unique_name([o.name for uuid, o
-                                        in self.objects.items()])
-        self.object_names = dict(zip(self.objects.keys(), names))
-        self.shape_form = None
+            
+    def recalculate(self, prev_state: Optional['State']) -> 'State':
+        if prev_state is not None and \
+                id(self.root_objects) == id(prev_state.root_objects) and \
+                id(self.objects) == id(prev_state.objects):
+            self.object_parent = prev_state.object_parent
+        else:
+            self.object_parent = {c: (k, i) for k, obj in self.objects.items()
+                                  if isinstance(obj, ObjectListData)
+                                  for i, c in enumerate(obj.children)}
+            for i, k in enumerate(self.root_objects):
+                self.object_parent[k] = None, i
+        if prev_state is not None and \
+                id(self.root_textures) == id(prev_state.root_textures) and \
+                id(self.textures) == id(prev_state.textures):
+            self.texture_names = prev_state.texture_names
+        else:
+            names = State.calc_unique_name([self.textures[uuid].name
+                                            for uuid in self.root_textures])
+            self.texture_names = dict(zip(self.root_textures, names))
+        if prev_state is not None and \
+                id(self.root_materials) == id(prev_state.root_materials) and \
+                id(self.materials) == id(prev_state.materials):
+            self.material_names = prev_state.material_names
+        else:
+            names = State.calc_unique_name([self.materials[uuid].name
+                                            for uuid in self.root_materials])
+            self.material_names = dict(zip(self.root_materials, names))
+        if prev_state is not None and \
+                id(self.root_objects) == id(prev_state.root_materials) and \
+                id(self.materials) == id(prev_state.materials):
+            self.object_names = prev_state.object_names
+        else:
+            names = State.calc_unique_name([o.name for uuid, o
+                                            in self.objects.items()])
+            self.object_names = dict(zip(self.objects.keys(), names))
         # noinspection PyTypeChecker
         textures: List[Tuple[UUID, str]] = list(self.texture_names.items())
-        if self.current_object is not None:
-            obj = self.objects[self.current_object]
-            if isinstance(obj, ObjectData) and obj.shape is not None:
-                self.shape_form = obj.shape[0], FormState(
-                    properties=self.shape_types[obj.shape[0]].properties(),
-                    values=obj.shape[1], textures=textures)
-        self.texture_form = None
-        if self.current_texture is not None:
-            texture = self.textures[self.current_texture]
-            if texture.texture is not None:
-                texture_name = texture.texture[0]
-                self.texture_form = texture_name, FormState(
-                    properties=self.texture_types[texture_name].properties(),
-                    values=texture.texture[1], textures=textures)
-        self.material_form = None
-        if self.current_material is not None:
-            mat = self.materials[self.current_material]
-            if mat.material is not None:
-                mat_name = mat.material[0]
-                self.material_form = mat_name, FormState(
-                    properties=self.material_types[mat_name].properties(),
-                    values=mat.material[1], textures=textures)
-        self.camera_form = None
-        if self.camera is not None:
-            self.camera_form = self.camera[0], FormState(
-                properties=self.camera_types[self.camera[0]].properties(),
-                values=self.camera[1], textures=textures)
-        self.valid_textures = set()
-        for uuid, texture in self.textures.items():
-            if texture.name and texture.texture is not None and \
-                    self.texture_types[texture.texture[0]].validate(
-                        texture.texture[1]):
-                self.valid_textures.add(uuid)
-        self.valid_materials = set()
-        for uuid, mat in self.materials.items():
-            if mat.name and mat.material is not None and \
-                    self.material_types[mat.material[0]].validate(
-                        mat.material[1], self.valid_textures):
-                self.valid_materials.add(uuid)
-        self.objects_inherited_materials = {}
-        self.valid_objects = set()
+        if prev_state is not None and \
+                id(self.texture_names) == id(prev_state.texture_names) and \
+                id(self.current_object) == id(prev_state.current_object) and \
+                id(self.objects) == id(prev_state.objects) and \
+                id(self.shape_types) == id(prev_state.shape_types):
+            self.shape_form = prev_state.shape_form
+        else:
+            self.shape_form = None
+            if self.current_object is not None:
+                obj = self.objects[self.current_object]
+                if isinstance(obj, ObjectData) and obj.shape is not None:
+                    self.shape_form = obj.shape[0], FormState(
+                        properties=self.shape_types[obj.shape[0]].properties(),
+                        values=obj.shape[1], textures=textures)
+        if prev_state is not None and \
+                id(self.texture_names) == id(prev_state.texture_names) and \
+                id(self.current_texture) == id(prev_state.current_texture) and \
+                id(self.textures) == id(prev_state.textures) and \
+                id(self.texture_types) == id(prev_state.texture_types):
+            self.texture_form = prev_state.texture_form
+        else:
+            self.texture_form = None
+            if self.current_texture is not None:
+                texture = self.textures[self.current_texture]
+                if texture.texture is not None:
+                    text_name = texture.texture[0]
+                    self.texture_form = text_name, FormState(
+                        properties=self.texture_types[text_name].properties(),
+                        values=texture.texture[1], textures=textures)
+        if prev_state is not None and \
+                id(self.texture_names) == id(prev_state.texture_names) and \
+                id(self.current_material) == id(prev_state.current_material) \
+                and id(self.materials) == id(prev_state.materials) and \
+                id(self.material_types) == id(prev_state.material_types):
+            self.material_form = prev_state.material_form
+        else:
+            self.material_form = None
+            if self.current_material is not None:
+                mat = self.materials[self.current_material]
+                if mat.material is not None:
+                    mat_name = mat.material[0]
+                    self.material_form = mat_name, FormState(
+                        properties=self.material_types[mat_name].properties(),
+                        values=mat.material[1], textures=textures)
+        if prev_state is not None and \
+                id(self.texture_names) == id(prev_state.texture_names) and \
+                id(self.camera) == id(prev_state.camera) and \
+                id(self.camera_types) == id(prev_state.camera_types):
+            self.camera_form = prev_state.camera_form
+        else:
+            self.camera_form = None
+            if self.camera is not None:
+                self.camera_form = self.camera[0], FormState(
+                    properties=self.camera_types[self.camera[0]].properties(),
+                    values=self.camera[1], textures=textures)
+        if prev_state is not None and \
+                id(self.textures) == id(prev_state.textures) and \
+                id(self.texture_types) == id(prev_state.texture_types):
+            self.valid_textures = prev_state.valid_textures
+        else:
+            self.valid_textures = set()
+            for uuid, texture in self.textures.items():
+                if texture.name and texture.texture is not None and \
+                        self.texture_types[texture.texture[0]].validate(
+                            texture.texture[1]):
+                    self.valid_textures.add(uuid)
+        if prev_state is not None and \
+                id(self.materials) == id(prev_state.materials) and \
+                id(self.material_types) == id(prev_state.material_types) and \
+                id(self.valid_textures) == id(prev_state.valid_textures):
+            self.valid_materials = prev_state.valid_materials
+        else:
+            self.valid_materials = set()
+            for uuid, mat in self.materials.items():
+                if mat.name and mat.material is not None and \
+                        self.material_types[mat.material[0]].validate(
+                            mat.material[1], self.valid_textures):
+                    self.valid_materials.add(uuid)
+        if prev_state is not None and \
+                id(self.objects) == id(prev_state.objects) and \
+                id(self.root_objects) == id(prev_state.root_objects) and \
+                id(self.materials) == id(prev_state.materials) and \
+                id(self.material_types) == id(prev_state.material_types) and \
+                id(self.shape_types) == id(prev_state.shape_types) and \
+                id(self.valid_materials) == id(prev_state.valid_materials):
+            self.valid_objects = prev_state.valid_objects
+        else:
+            self.objects_inherited_materials = {}
+            self.valid_objects = set()
 
-        def object_traversal(uuids: List[UUID],
-                             inherited: Optional[UUID]) -> None:
-            for uuid in uuids:
+            def object_traversal(uuids: List[UUID],
+                                 inherited: Optional[UUID]) -> None:
+                for uuid in uuids:
+                    obj = self.objects[uuid]
+                    if obj.material is not None and \
+                            obj.material in self.materials:
+                        n_inherited: Optional[UUID] = obj.material
+                    else:
+                        n_inherited = inherited
+                    if n_inherited:
+                        self.objects_inherited_materials[obj.key] = n_inherited
+                    if isinstance(obj, ObjectListData):
+                        object_traversal(obj.children, n_inherited)
+
+            object_traversal(self.root_objects, None)
+            for uuid, obj in self.objects.items():
+                if isinstance(obj, ObjectData) and \
+                        obj.name and obj.shape is not None and \
+                        self.shape_types[obj.shape[0]].validate(obj.shape[1]) \
+                        and obj.key in self.objects_inherited_materials and \
+                        self.objects_inherited_materials[obj.key] \
+                        in self.valid_materials:
+                    self.valid_objects.add(uuid)
+        if prev_state is not None and \
+                id(self.camera) == id(prev_state.camera) and \
+                id(self.camera_types) == id(self.camera_types):
+            self.camera_valid = prev_state.camera_valid
+        else:
+            self.camera_valid = False
+            if self.camera is not None and self.camera_types[self.camera[0]] \
+                    .validate(self.camera[1]):
+                self.camera_valid = True
+        if prev_state is not None and \
+                id(self.objects) == id(prev_state.objects) and \
+                id(self.root_objects) == id(prev_state.root_objects):
+            self.visible_objects = prev_state.visible_objects
+        else:
+            self.visible_objects = set()
+
+            def object_traversal2(uuids: List[UUID]) -> None:
+                for uuid in uuids:
+                    obj = self.objects[uuid]
+                    if not obj.visible:
+                        continue
+                    if isinstance(obj, ObjectListData):
+                        object_traversal2(obj.children)
+                    else:
+                        self.visible_objects.add(uuid)
+
+            object_traversal2(self.root_objects)
+        if prev_state is not None and \
+                id(self.visible_objects) == id(prev_state.visible_objects) and \
+                id(self.valid_objects) == id(prev_state.valid_objects):
+            self.rendered_objects = prev_state.rendered_objects
+        else:
+            self.rendered_objects = self.visible_objects & self.valid_objects
+        if prev_state is not None and \
+                id(self.rendered_objects) == id(prev_state.rendered_objects) \
+                and id(self.objects) == id(prev_state.objects):
+            self.rendered_materials = prev_state.rendered_materials
+        else:
+            self.rendered_materials = set()
+            for uuid in self.rendered_objects:
                 obj = self.objects[uuid]
-                if obj.material is not None and obj.material in self.materials:
-                    new_inherited: Optional[UUID] = obj.material
-                else:
-                    new_inherited = inherited
-                if new_inherited:
-                    self.objects_inherited_materials[obj.key] = new_inherited
-                if isinstance(obj, ObjectListData):
-                    object_traversal(obj.children, new_inherited)
-
-        object_traversal(self.root_objects, None)
-        for uuid, obj in self.objects.items():
-            if isinstance(obj, ObjectData) and \
-                    obj.name and obj.shape is not None and \
-                    self.shape_types[obj.shape[0]].validate(obj.shape[1]) and \
-                    obj.key in self.objects_inherited_materials and \
-                    self.objects_inherited_materials[obj.key] \
-                    in self.valid_materials:
-                self.valid_objects.add(uuid)
-        self.camera_valid = False
-        if self.camera is not None and self.camera_types[self.camera[0]] \
-                .validate(self.camera[1]):
-            self.camera_valid = True
-        self.visible_objects = set()
-
-        def object_traversal2(uuids: List[UUID]) -> None:
-            for uuid in uuids:
-                obj = self.objects[uuid]
-                if not obj.visible:
-                    return
-                if isinstance(obj, ObjectListData):
-                    object_traversal2(obj.children)
-                else:
-                    self.visible_objects.add(uuid)
-
-        object_traversal2(self.root_objects)
-        self.rendered_objects = self.visible_objects & self.valid_objects
-        self.rendered_materials = set()
-        for uuid in self.rendered_objects:
-            obj = self.objects[uuid]
-            assert obj.material is not None
-            self.rendered_materials.add(obj.material)
-        self.rendered_textures = set()
-        for uuid in self.rendered_materials:
-            mat = self.materials[uuid]
-            assert mat.material is not None
-            for i, p in enumerate(
-                    self.material_types[mat.material[0]].properties()):
-                if isinstance(p, TextureProperty):
-                    uuid2 = mat.material[1][i]
-                    assert isinstance(uuid2, UUID)
-                    self.rendered_textures.add(uuid2)
-        stack = list(self.rendered_textures)
-        while stack:
-            uuid = stack.pop()
-            text = self.textures[uuid]
-            assert text.texture is not None
-            for i, p in enumerate(
-                    self.texture_types[text.texture[0]].properties()):
-                if isinstance(p, TextureProperty):
-                    uuid2 = text.texture[1][i]
-                    assert isinstance(uuid2, UUID)
-                    if uuid2 not in self.rendered_textures:
+                assert obj.material is not None
+                self.rendered_materials.add(obj.material)
+        if prev_state is not None and \
+                id(self.rendered_materials) == \
+                id(prev_state.rendered_materials) and \
+                id(self.materials) == id(prev_state.materials) and \
+                id(self.textures) == id(prev_state.textures) and\
+                id(self.material_types) == id(prev_state.material_types) and \
+                id(self.texture_types) == id(prev_state.texture_types):
+            self.rendered_textures = prev_state.rendered_textures
+        else:
+            self.rendered_textures = set()
+            for uuid in self.rendered_materials:
+                mat = self.materials[uuid]
+                assert mat.material is not None
+                for i, p in enumerate(
+                        self.material_types[mat.material[0]].properties()):
+                    if isinstance(p, TextureProperty):
+                        uuid2 = mat.material[1][i]
+                        assert isinstance(uuid2, UUID)
                         self.rendered_textures.add(uuid2)
-                        stack.append(uuid2)
+            stack = list(self.rendered_textures)
+            while stack:
+                uuid = stack.pop()
+                text = self.textures[uuid]
+                assert text.texture is not None
+                for i, p in enumerate(
+                        self.texture_types[text.texture[0]].properties()):
+                    if isinstance(p, TextureProperty):
+                        uuid2 = text.texture[1][i]
+                        assert isinstance(uuid2, UUID)
+                        if uuid2 not in self.rendered_textures:
+                            self.rendered_textures.add(uuid2)
+                            stack.append(uuid2)
+        return self
 
     def to_json(self, _path: str) -> Dict[str, Any]:
         # noinspection PyDictCreation
@@ -519,8 +628,8 @@ class State:
         return data
 
     def with_from_json(self, data: Dict[str, Any]) -> 'State':
-        state: 'State' = copy.deepcopy(self)
-        state.render_result = None
+        state: 'State' = State(self)
+        state.preview_result = None
         state.root_objects = [UUID(o) for o in data['root_objects']]
         state.current_object = None
         state.objects = {}
@@ -589,7 +698,7 @@ class State:
             background=(int(background[1:3], 16), int(background[3:5], 16),
                         int(background[5:7], 16)),
         )
-        return State(state)
+        return state.recalculate(prev_state=self)
 
     def object_uuid_to_widget(
             self, window: 'MainWindow', uuid: UUID
@@ -605,93 +714,107 @@ class State:
         return widget
 
     def with_more_shapes(self, shapes: Sequence[Type[ShapeType]]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.shape_types = state.shape_types.copy()
         for shape in shapes:
             kind = shape.kind()
             assert kind not in self.shape_types
             state.shape_types[kind] = shape
-        return State(state)
+        return state.recalculate(self).recalculate(self)
 
-    def with_render_result(self, image: Optional[np.ndarray]) -> 'State':
-        state = copy.deepcopy(self)
-        state.render_result = image
-        return State(state)
+    def with_preview_result(self, image: Optional[np.ndarray]) -> 'State':
+        state = State(self)
+        state.preview_result = image
+        return state.recalculate(self)
 
     def with_more_textures(self,
                            textures: Sequence[Type[TextureType]]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.texture_types = state.texture_types.copy()
         for texture in textures:
             kind = texture.kind()
             assert kind not in self.texture_types
             state.texture_types[kind] = texture
-        return State(state)
+        return state.recalculate(self)
 
     def with_more_materials(self,
                             materials: Sequence[Type[MaterialType]]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.material_types = state.material_types.copy()
         for material in materials:
             kind = material.kind()
             assert kind not in self.material_types
             state.material_types[kind] = material
-        return State(state)
+        return state.recalculate(self)
 
     def with_more_cameras(self, cameras: Sequence[Type[CameraType]]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.camera_types = state.camera_types.copy()
         for camera in cameras:
             kind = camera.kind()
             assert kind not in self.camera_types
             state.camera_types[kind] = camera
-        return State(state)
+        return state.recalculate(self)
 
     def with_modify_object(
             self, uuid: UUID,
             op: Callable[[Union[ObjectData, ObjectListData]], Any]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.objects = state.objects.copy()
+        state.objects[uuid] = copy.deepcopy(state.objects[uuid])
         op(state.objects[uuid])
-        return State(state)
+        return state.recalculate(self)
 
     def with_modify_texture(
             self, uuid: UUID, op: Callable[[TextureData], Any]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.textures = state.textures.copy()
+        state.textures[uuid] = copy.deepcopy(state.textures[uuid])
         op(state.textures[uuid])
-        return State(state)
+        return state.recalculate(self)
 
     def with_modify_material(
             self, uuid: UUID, op: Callable[[MaterialData], Any]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.materials = state.materials.copy()
+        state.materials[uuid] = copy.deepcopy(state.materials[uuid])
         op(state.materials[uuid])
-        return State(state)
+        return state.recalculate(self)
 
     def with_modify_camera(
             self, op: Callable[[Optional[Tuple[str, List[Any]]]],
                                Optional[Tuple[str, List[Any]]]]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.camera = copy.deepcopy(state.camera)
         state.camera = op(state.camera)
-        return State(state)
+        return state.recalculate(self)
 
     def with_modify_renderer(
             self, op: Callable[[RendererData], None]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.renderer = copy.deepcopy(state.renderer)
         op(state.renderer)
-        return State(state)
+        return state.recalculate(self)
 
     def with_current_object(self, uuid: Optional[UUID]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
         state.current_object = uuid
-        return State(state)
+        return state.recalculate(self)
 
     def with_current_texture(self, uuid: Optional[UUID]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
         state.current_texture = uuid
-        return State(state)
+        return state.recalculate(self)
 
     def with_current_material(self, uuid: Optional[UUID]) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
         state.current_material = uuid
-        return State(state)
+        return state.recalculate(self)
 
     def with_remove_object(self, uuid: UUID) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.objects = state.objects.copy()
+        state.root_objects = state.root_objects.copy()
 
         def recursive_remove(uuid: UUID) -> None:
             if state.current_object == uuid:
@@ -717,10 +840,12 @@ class State:
             assert isinstance(parent_object, ObjectListData)
             parent_object.children.remove(uuid)
         recursive_remove(uuid)
-        return State(state)
+        return state.recalculate(self)
 
     def with_remove_texture(self, uuid: UUID) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.textures = state.textures.copy()
+        state.root_textures = state.root_textures.copy()
         del state.textures[uuid]
         index = state.root_textures.index(uuid)
         state.root_textures.remove(uuid)
@@ -731,10 +856,12 @@ class State:
                 state.current_texture = state.root_textures[index]
             else:
                 state.current_texture = None
-        return State(state)
+        return state.recalculate(self)
 
     def with_remove_material(self, uuid: UUID) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.materials = state.materials.copy()
+        state.root_materials = state.root_materials.copy()
         del state.materials[uuid]
         index = state.root_materials.index(uuid)
         state.root_materials.remove(uuid)
@@ -745,7 +872,7 @@ class State:
                 state.current_material = state.root_materials[index]
             else:
                 state.current_material = None
-        return State(state)
+        return state.recalculate(self)
 
     def with_add_object(self, name: Optional[str] = None,
                         group: bool = True) -> 'State':
@@ -760,7 +887,9 @@ class State:
             else:
                 root, index = self.object_parent[self.current_object]
                 index += 1
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.objects = state.objects.copy()
+        state.root_objects = state.root_objects.copy()
         state.objects = state.objects.copy()
         if group:
             item: Union[ObjectData, ObjectListData] = \
@@ -777,10 +906,12 @@ class State:
             assert isinstance(parent, ObjectListData)
             parent.children.insert(index, item.key)
         state.current_object = item.key
-        return State(state)
+        return state.recalculate(self)
 
     def with_add_texture(self, name: Optional[str] = None) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.textures = state.textures.copy()
+        state.root_textures = state.root_textures.copy()
         item = TextureData(name=name or '', texture=None)
         state.textures[item.key] = item
         if state.current_texture is None:
@@ -789,10 +920,12 @@ class State:
             state.root_textures.insert(
                 state.root_textures.index(state.current_texture) + 1, item.key)
         state.current_texture = item.key
-        return State(state)
+        return state.recalculate(self)
 
     def with_add_material(self, name: Optional[str] = None) -> 'State':
-        state = copy.deepcopy(self)
+        state = State(self)
+        state.materials = state.materials.copy()
+        state.root_materials = state.root_materials.copy()
         item = MaterialData(name=name or '', material=None)
         state.materials[item.key] = item
         if state.current_material is None:
@@ -802,7 +935,7 @@ class State:
                 state.root_materials.index(state.current_material) + 1,
                 item.key)
         state.current_material = item.key
-        return State(state)
+        return state.recalculate(self)
 
     def apply_always(self, window: 'MainWindow') -> None:
         blocks: List[QObject] = [
@@ -926,8 +1059,8 @@ class State:
             image.shape[1] * 3, QImage.Format_RGB888))
 
     def apply_image(self, window: 'MainWindow') -> None:
-        if self.render_result is not None:
-            pixmap = State.array_to_pixmap(self.render_result)
+        if self.preview_result is not None:
+            pixmap = State.array_to_pixmap(self.preview_result)
             window.ui.image.setPixmap(pixmap.scaled(
                 window.ui.image.width(),
                 window.ui.image.height(),
@@ -1201,7 +1334,7 @@ class State:
         for o in blocks:
             o.blockSignals(True)
         # render result
-        if id(self.render_result) != id(prev_state.render_result):
+        if id(self.preview_result) != id(prev_state.preview_result):
             self.apply_image(window)
         # object tree
         State.apply_diff_list(
@@ -1255,29 +1388,43 @@ class State:
             window.trigger_preview()
 
     def need_rerender(self, prev_state: 'State') -> bool:
-        if self.camera != prev_state.camera or \
+        if id(self.camera) != id(prev_state.camera) or \
+                id(self.renderer) != id(prev_state.renderer) or \
+                self.camera != prev_state.camera or \
                 self.renderer != prev_state.renderer:
             return True
-        if self.rendered_objects != prev_state.rendered_objects or \
+        if id(self.rendered_objects) != id(prev_state.rendered_objects) or \
+                id(self.rendered_materials) != \
+                id(prev_state.rendered_materials) or \
+                id(self.rendered_textures) != \
+                id(prev_state.rendered_textures) or \
+                self.rendered_objects != prev_state.rendered_objects or \
                 self.rendered_materials != prev_state.rendered_materials or \
                 self.rendered_textures != prev_state.rendered_textures:
             return True
-        for uuid in self.rendered_objects:
-            obj1 = self.objects[uuid]
-            obj2 = prev_state.objects[uuid]
-            assert isinstance(obj1, ObjectData) and isinstance(obj2, ObjectData)
-            if obj1.shape != obj2.shape or obj1.material != obj2.material:
-                return True
-        for uuid in self.rendered_materials:
-            mat1 = self.materials[uuid]
-            mat2 = prev_state.materials[uuid]
-            if mat1.material != mat2.material:
-                return True
-        for uuid in self.rendered_textures:
-            text1 = self.textures[uuid]
-            text2 = prev_state.textures[uuid]
-            if text1.texture != text2.texture:
-                return True
+        if id(self.rendered_objects) != id(prev_state.rendered_objects) or \
+                id(self.objects) != id(prev_state.objects):
+            for uuid in self.rendered_objects:
+                obj1 = self.objects[uuid]
+                obj2 = prev_state.objects[uuid]
+                assert isinstance(obj1, ObjectData) and \
+                       isinstance(obj2, ObjectData)
+                if obj1.shape != obj2.shape or obj1.material != obj2.material:
+                    return True
+        if id(self.rendered_materials) != id(prev_state.rendered_materials) or \
+                id(self.materials) != id(prev_state.materials):
+            for uuid in self.rendered_materials:
+                mat1 = self.materials[uuid]
+                mat2 = prev_state.materials[uuid]
+                if mat1.material != mat2.material:
+                    return True
+        if id(self.rendered_textures) != id(prev_state.rendered_textures) or \
+                id(self.textures) != id(prev_state.textures):
+            for uuid in self.rendered_textures:
+                text1 = self.textures[uuid]
+                text2 = prev_state.textures[uuid]
+                if text1.texture != text2.texture:
+                    return True
         return False
 
     def generate(self,
@@ -1354,7 +1501,7 @@ class State:
         state.camera = data['camera']
         state.camera_types = data['camera_types']
         state.renderer = data['renderer']
-        return State(state)
+        return state.recalculate(None)
 
 
 @dataclass
@@ -1485,9 +1632,11 @@ class MainWindow(QMainWindow):
             lambda i: self.move_history(list(self.history.keys())[i]))
         # resize
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
-        # self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
-        # self.tabifyDockWidget(self.ui.dockScene, self.ui.dockTexture)
+        self.tabifyDockWidget(self.ui.dockScene, self.ui.dockMaterial)
+        self.tabifyDockWidget(self.ui.dockScene, self.ui.dockTexture)
         self.ui.dockScene.raise_()
+        self.tabifyDockWidget(self.ui.dockCamera, self.ui.dockOperation)
+        self.ui.dockCamera.raise_()
         size = QGuiApplication.primaryScreen().size()
         self.resize(QSize(int(0.8 * size.width()), int(0.8 * size.height())))
 
@@ -1704,7 +1853,7 @@ class MainWindow(QMainWindow):
 
     @QtCore.pyqtSlot(np.ndarray)
     def render_result_available(self, data: np.ndarray) -> None:
-        self.set_state(self.state.with_render_result(data))
+        self.set_state(self.state.with_preview_result(data))
 
     def trigger_preview(self) -> None:
         def trigger() -> None:
@@ -1718,6 +1867,7 @@ class MainWindow(QMainWindow):
 
     def renderer_width_changed(self) -> None:
         width = int(self.ui.renderWidth.text())
+
         def modify(renderer: RendererData) -> None:
             renderer.width = width
         if self.state.renderer.width != width:
@@ -1726,6 +1876,7 @@ class MainWindow(QMainWindow):
 
     def renderer_height_changed(self) -> None:
         height = int(self.ui.renderHeight.text())
+
         def modify(renderer: RendererData) -> None:
             renderer.height = height
         if self.state.renderer.height != height:
@@ -1734,6 +1885,7 @@ class MainWindow(QMainWindow):
 
     def renderer_max_depth_changed(self) -> None:
         max_depth = int(self.ui.renderMaxDepth.text())
+
         def modify(renderer: RendererData) -> None:
             renderer.max_depth = max_depth
         if self.state.renderer.max_depth != max_depth:
@@ -1743,6 +1895,8 @@ class MainWindow(QMainWindow):
     def goto_texture(self, uuid: UUID) -> None:
         self.ui.dockTexture.raise_()
         self.set_state(self.state.with_current_texture(uuid))
+        item = self.ui.textureList.item(self.state.root_textures.index(uuid))
+        self.ui.textureList.scrollToItem(item)
 
     def goto_current_material(self) -> None:
         assert self.state.current_object
@@ -1750,6 +1904,9 @@ class MainWindow(QMainWindow):
         assert material is not None
         self.ui.dockMaterial.raise_()
         self.set_state(self.state.with_current_material(material))
+        item = self.ui.materialList.item(
+            self.state.root_materials.index(material))
+        self.ui.materialList.scrollToItem(item)
 
     def shape_form_changed(self, index: int, data: Any) -> None:
         def modify(obj: Union[ObjectData, ObjectListData]) -> None:

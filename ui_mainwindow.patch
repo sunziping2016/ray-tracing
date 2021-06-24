@@ -1,5 +1,5 @@
---- raw_ui_mainwindow.py	2021-06-24 16:52:56.670926341 +0800
-+++ ui_mainwindow.py	2021-06-24 16:52:57.817591174 +0800
+--- raw_ui_mainwindow.py	2021-06-24 20:45:18.086241105 +0800
++++ ui_mainwindow.py	2021-06-24 20:45:19.036257931 +0800
 @@ -9,10 +9,11 @@
  
  
@@ -11,9 +11,9 @@
 -    def setupUi(self, MainWindow):
 +    def setupUi(self, MainWindow: QMainWindow) -> None:
          MainWindow.setObjectName("MainWindow")
-         MainWindow.resize(1130, 914)
+         MainWindow.resize(966, 914)
          self.centralwidget = QtWidgets.QWidget(MainWindow)
-@@ -314,7 +315,7 @@
+@@ -334,7 +335,7 @@
          self.retranslateUi(MainWindow)
          QtCore.QMetaObject.connectSlotsByName(MainWindow)
  
@@ -21,4 +21,4 @@
 +    def retranslateUi(self, MainWindow: QMainWindow) -> None:
          _translate = QtCore.QCoreApplication.translate
          MainWindow.setWindowTitle(_translate("MainWindow", "渲染大作业 By Sun"))
-         self.fileMenu.setTitle(_translate("MainWindow", "文件"))
+         self.image.setText(_translate("MainWindow", "■"))

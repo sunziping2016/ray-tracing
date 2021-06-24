@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1130</width>
+    <width>966</width>
     <height>914</height>
    </rect>
   </property>
@@ -39,7 +39,7 @@
        <string notr="true">QLabel { background: gray; }</string>
       </property>
       <property name="text">
-       <string/>
+       <string>■</string>
       </property>
       <property name="alignment">
        <set>Qt::AlignCenter</set>
@@ -53,7 +53,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1130</width>
+     <width>966</width>
      <height>20</height>
     </rect>
    </property>
@@ -500,10 +500,65 @@
           <x>0</x>
           <y>0</y>
           <width>274</width>
-          <height>427</height>
+          <height>596</height>
          </rect>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_6">
+         <item>
+          <widget class="QGroupBox" name="renderControls">
+           <property name="title">
+            <string>渲染</string>
+           </property>
+           <layout class="QHBoxLayout" name="horizontalLayout_2">
+            <item>
+             <widget class="QLabel" name="renderStatus">
+              <property name="text">
+               <string>渲染采样：0</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="renderSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="renderStart">
+              <property name="maximumSize">
+               <size>
+                <width>23</width>
+                <height>23</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>▶</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="renderStop">
+              <property name="maximumSize">
+               <size>
+                <width>23</width>
+                <height>23</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>⏹</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
          <item>
           <widget class="QGroupBox" name="cameraProperties">
            <property name="title">
@@ -603,6 +658,19 @@
            </layout>
           </widget>
          </item>
+         <item>
+          <spacer name="cameraSpcer">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>40</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
         </layout>
        </widget>
       </widget>
@@ -620,7 +688,11 @@
    <widget class="QWidget" name="contentOperation">
     <layout class="QVBoxLayout" name="verticalLayout_5">
      <item>
-      <widget class="QListWidget" name="history"/>
+      <widget class="QListWidget" name="history">
+       <property name="contextMenuPolicy">
+        <enum>Qt::ActionsContextMenu</enum>
+       </property>
+      </widget>
      </item>
     </layout>
    </widget>
