@@ -51,7 +51,7 @@ pub fn refract<F: SimdRealField<Element = f32>>(
     n: &UnitVector3<F>,
     etai_over_etat: F,
 ) -> UnitVector3<F> {
-    let cos_theta = -uv.dot(&n);
+    let cos_theta = -uv.dot(n);
     let r_out_perp = (uv.as_ref() + n.scale(cos_theta)).scale(etai_over_etat);
     let r_out_parallel = n.scale(-(F::one() - r_out_perp.norm_squared()).simd_sqrt());
     UnitVector3::new_unchecked(r_out_perp + r_out_parallel)

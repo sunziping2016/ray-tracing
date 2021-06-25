@@ -42,29 +42,13 @@ impl AABB {
         self.min[0] > self.max[0] || self.min[1] > self.max[1] || self.min[2] > self.max[2]
     }
     pub fn join(&self, other: &Self) -> Self {
-        let min = Vector3::new(
-            self.min[0].min(other.min[0]),
-            self.min[1].min(other.min[1]),
-            self.min[2].min(other.min[2]),
-        );
-        let max = Vector3::new(
-            self.max[0].max(other.max[0]),
-            self.max[1].max(other.max[1]),
-            self.max[2].max(other.max[2]),
-        );
+        let min = self.min.inf(&other.min);
+        let max = self.max.sup(&other.max);
         Self { min, max }
     }
     pub fn grow(&self, other: &Vector3<f32>) -> Self {
-        let min = Vector3::new(
-            self.min[0].min(other[0]),
-            self.min[1].min(other[1]),
-            self.min[2].min(other[2]),
-        );
-        let max = Vector3::new(
-            self.max[0].max(other[0]),
-            self.max[1].max(other[1]),
-            self.max[2].max(other[2]),
-        );
+        let min = self.min.inf(other);
+        let max = self.max.sup(other);
         Self { min, max }
     }
     pub fn size(&self) -> Vector3<f32> {

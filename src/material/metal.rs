@@ -37,10 +37,10 @@ where
             reflected.as_ref() + random_in_unit_sphere(rng).scale(F::splat(self.fuzz)),
         );
         let specular_ray = Ray::new(hit_record.p, direction, *r_in.time(), r_in.mask());
-        return ScatterRecord::Specular {
+        ScatterRecord::Specular {
             attenuation: Vector3::splat(self.albedo),
             specular_ray,
-        };
+        }
     }
 }
 

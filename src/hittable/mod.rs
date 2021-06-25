@@ -1,11 +1,12 @@
 pub mod py;
 pub mod sphere;
+pub mod triangle;
 
 use crate::bvh::aabb::AABB;
-use crate::extract;
 use crate::ray::Ray;
 use crate::simd::MySimdVector;
 use crate::SimdF32Field;
+use crate::{extract, EPSILON};
 use arrayvec::ArrayVec;
 use auto_impl::auto_impl;
 use nalgebra::{ClosedAdd, Scalar, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
@@ -176,8 +177,25 @@ pub trait Bounded {
 #[auto_impl(&, &mut, Box, Rc, Arc)]
 pub trait Hittable<F: SimdValue, R: Rng>: Bounded {
     fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F>;
-    fn pdf_value(&self, origin: &Vector3<F>, direction: &Vector3<F>) -> F;
+    fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F;
     fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F>;
+
+    fn test_hit(
+        &self,
+        origin: &Vector3<F>,
+        direction: &UnitVector3<F>,
+        mask: F::SimdBool,
+    ) -> HitRecord<F>
+    where
+        F: SimdF32Field,
+    {
+        Hittable::<F, R>::hit(
+            &self,
+            &Ray::new(origin.clone(), direction.clone(), F::zero(), mask),
+            F::splat(EPSILON),
+            F::splat(f32::INFINITY),
+        )
+    }
 }
 
 impl<T> Bounded for Py<T>
@@ -197,8 +215,8 @@ where
         Python::with_gil(|py| self.as_ref(py).borrow().hit(ray, t_min, t_max))
     }
 
-    fn pdf_value(&self, origin: &Vector3<F>, direction: &Vector3<F>) -> F {
-        Python::with_gil(|py| self.as_ref(py).borrow().pdf_value(origin, direction))
+    fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+        Python::with_gil(|py| self.as_ref(py).borrow().pdf_value(origin, direction, mask))
     }
 
     fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {

@@ -32,6 +32,7 @@ pub struct CameraParam {
 #[pymethods]
 impl CameraParam {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     fn py_new(
         look_from: PyVector3,
         look_at: PyVector3,

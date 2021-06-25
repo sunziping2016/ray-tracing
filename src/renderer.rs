@@ -163,6 +163,11 @@ where
                     });
             });
         let mut colors = vec![Vector3::splat(self.scene.background()); rays.len()];
+        // println!(
+        //     "depth: {}  hit rate: {}",
+        //     depth,
+        //     hit_ray_indices.len() as f32 / F::LANES as f32 / rays.len() as f32
+        // );
         if hit_ray_indices.is_empty() {
             return colors;
         }
@@ -340,6 +345,7 @@ impl<F> RenderResult<F> {
         lock.1 += 1;
         lock.1
     }
+    #[allow(clippy::needless_collect)]
     pub fn get(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
     where
         F: SimdRealField<Element = f32>,
@@ -403,7 +409,7 @@ impl PyRenderer {
         }
     }
     #[name = "render"]
-    fn py_render<'py>(&self, py: Python) -> PyResult<PyObject> {
+    fn py_render(&self, py: Python) -> PyResult<PyObject> {
         let (tx, rx) = async_channel::bounded(1);
         let inner = self.inner.clone();
         let width = self.inner.param.width as usize;

@@ -79,13 +79,17 @@ where
             mask,
         }
     }
-    fn pdf_value(&self, origin: &Vector3<F>, _direction: &Vector3<F>) -> F {
+    fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+        let mask = Hittable::<F, R>::test_hit(self, origin, direction, mask).mask;
+        if mask.none() {
+            return F::zero();
+        }
         let cos_theta_max = (F::one()
             - F::splat(self.radius * self.radius)
                 / (Vector3::splat(self.center) - origin).norm_squared())
         .simd_sqrt();
         let solid_angle = F::simd_two_pi() * (F::one() - cos_theta_max);
-        solid_angle.simd_recip()
+        mask.if_else(|| solid_angle.simd_recip(), F::zero)
     }
     fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
         let direction = Vector3::splat(self.center) - origin;

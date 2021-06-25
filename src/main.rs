@@ -14,11 +14,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::fs::File;
 use std::future::Future;
+use std::io::{BufRead, BufReader};
 use std::process;
 use std::sync::{mpsc, Arc};
 use std::time::SystemTime;
 use v4ray::camera::CameraParam;
 use v4ray::hittable::sphere::Sphere;
+use v4ray::hittable::triangle::Triangle;
 use v4ray::material::dielectric::Dielectric;
 use v4ray::material::lambertian::Lambertian;
 use v4ray::material::metal::Metal;
@@ -169,6 +171,68 @@ where
         );
         scene
     }
+    pub fn create_world2<G>(_rng: &mut G) -> Scene<F, R> {
+        // let material = Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
+        //     0.4f32, 0.2f32, 0.1f32,
+        // ))));
+        let material = Arc::new(Metal::new(Vector3::new(0.7f32, 0.6f32, 0.5f32), 0.3));
+        let mut vertices = Vec::new();
+        let mut vertex_norms = Vec::new();
+        let mut faces = Vec::new();
+        let bunny_file = File::open("data/bunny.obj").unwrap();
+        for line in BufReader::new(bunny_file).lines().map(|l| l.unwrap()) {
+            if line.starts_with("v") {
+                let vertex = line
+                    .split(' ')
+                    .skip(1)
+                    .map(|x| x.parse::<f32>().unwrap())
+                    .collect::<Vec<_>>();
+                assert_eq!(vertex.len(), 3);
+                vertices.push(Vector3::new(vertex[0], vertex[1], vertex[2]));
+                vertex_norms.push(Vector3::from_element(0.0f32));
+            } else if line.starts_with("f") {
+                let indices = line
+                    .split(' ')
+                    .skip(1)
+                    .map(|x| x.parse::<usize>().unwrap() - 1)
+                    .collect::<Vec<_>>();
+                assert_eq!(indices.len(), 3);
+                faces.push([indices[0], indices[1], indices[2]]);
+                let vertex1 = vertices[indices[0]];
+                let vertex2 = vertices[indices[1]];
+                let vertex3 = vertices[indices[2]];
+                let norm = (vertex2 - vertex1).cross(&(vertex3 - vertex2)).normalize();
+                vertex_norms[indices[0]] += norm;
+                vertex_norms[indices[1]] += norm;
+                vertex_norms[indices[2]] += norm;
+            }
+        }
+        let mut scene = Scene::new(Vector3::new(1f32, 1f32, 1f32), Zero::zero());
+        let vertex_norms = vertex_norms
+            .into_iter()
+            .map(|x| x.normalize())
+            .collect::<Vec<_>>();
+        for f in faces.into_iter() {
+            let shape = Triangle::new(
+                [vertices[f[0]], vertices[f[1]], vertices[f[2]]],
+                [vertex_norms[f[0]], vertex_norms[f[1]], vertex_norms[f[2]]],
+                [Zero::zero(), Zero::zero(), Zero::zero()],
+            );
+            scene.add(Arc::new(shape), material.clone());
+        }
+        scene.add(
+            Arc::new(Sphere::new(
+                Vector3::new(0f32, 0.0333099 - 1000f32, 0f32),
+                1000f32,
+            )),
+            Arc::new(Lambertian::new(Checker::new(
+                SolidColor::new(Vector3::new(0.2f32, 0.3f32, 0.1f32)),
+                SolidColor::new(Vector3::new(0.9f32, 0.9f32, 0.9f32)),
+                40f32,
+            ))),
+        );
+        scene
+    }
     pub fn new(param: SceneParam, scene: Scene<F, R>) -> Self {
         let width = param.renderer.width;
         let height = param.renderer.height;
@@ -215,7 +279,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let width = param.renderer.width;
     let height = param.renderer.height;
     let example: Arc<Example<Float, ThreadRng>> =
-        Arc::new(Example::new(param, Example::create_world(&mut rng)));
+        Arc::new(Example::new(param, Example::create_world2(&mut rng)));
     let (msg_tx, msg_rx) = async_channel::bounded(16);
     let (render_tx, render_rx) = mpsc::channel();
 

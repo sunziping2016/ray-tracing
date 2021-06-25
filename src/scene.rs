@@ -42,6 +42,9 @@ impl<F, R: Rng> Scene<F, R> {
     pub fn len(&self) -> usize {
         self.hittables.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.hittables.is_empty()
+    }
     pub fn hittable(&self, index: usize) -> &BoxedHittable<F, R> {
         &self.hittables[index]
     }

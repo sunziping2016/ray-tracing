@@ -4,7 +4,7 @@ use crate::hittable::{Bounded, HitRecord, Hittable};
 use crate::py::{bits_to_m, f_to_numpy, PyBoxedHittable, PyRng, PySimd};
 use crate::ray::{PyRay, Ray};
 use crate::simd::MySimdVector;
-use nalgebra::{SimdBool, UnitVector3, Vector2, Vector3};
+use nalgebra::{SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
 use pyo3::proc_macro::pyclass;
 use pyo3::types::PyModule;
 use pyo3::{Py, PyAny, PyObject, PyResult, Python};
@@ -53,7 +53,12 @@ impl Hittable<PySimd, PyRng> for PyHittable {
         })
     }
 
-    fn pdf_value(&self, _origin: &Vector3<PySimd>, _direction: &Vector3<PySimd>) -> PySimd {
+    fn pdf_value(
+        &self,
+        _origin: &Vector3<PySimd>,
+        _direction: &UnitVector3<PySimd>,
+        _mask: <PySimd as SimdValue>::SimdBool,
+    ) -> PySimd {
         todo!()
     }
 
