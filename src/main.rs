@@ -181,7 +181,7 @@ where
         let mut faces = Vec::new();
         let bunny_file = File::open("data/bunny.obj").unwrap();
         for line in BufReader::new(bunny_file).lines().map(|l| l.unwrap()) {
-            if line.starts_with("v") {
+            if line.starts_with('v') {
                 let vertex = line
                     .split(' ')
                     .skip(1)
@@ -190,7 +190,7 @@ where
                 assert_eq!(vertex.len(), 3);
                 vertices.push(Vector3::new(vertex[0], vertex[1], vertex[2]));
                 vertex_norms.push(Vector3::from_element(0.0f32));
-            } else if line.starts_with("f") {
+            } else if line.starts_with('f') {
                 let indices = line
                     .split(' ')
                     .skip(1)

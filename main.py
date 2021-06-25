@@ -1977,8 +1977,8 @@ class MainWindow(QMainWindow):
         def trigger() -> None:
             param, camera, scene = self.state.generate(False)
             self.renderer = v4ray.Renderer(param, camera, scene)
-            self.set_state(self.state.with_rendering(2))
-            for _ in range(2):
+            self.set_state(self.state.with_rendering(os.cpu_count() or 8))
+            for _ in range(os.cpu_count() or 8):
                 asyncio.run_coroutine_threadsafe(
                     render(self.renderer, self.render_result),
                     self.loop)

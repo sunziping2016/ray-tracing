@@ -35,6 +35,7 @@ where
 }
 
 #[pyclass(name = "Checker")]
+#[derive(Clone)]
 pub struct PyChecker {
     inner: Checker<PyBoxedTexture, PyBoxedTexture>,
 }

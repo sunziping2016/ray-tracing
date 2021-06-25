@@ -15,11 +15,23 @@ pub fn py_init_material(module: &PyModule) -> PyResult<()> {
 
 pub fn to_material(py: Python, item: Py<PyAny>) -> PyBoxedMaterial {
     if let Ok(lambertian) = item.extract::<Py<PyLambertian>>(py) {
-        Arc::new(lambertian) as PyBoxedMaterial
+        Arc::new(
+            unsafe { lambertian.into_ref(py).try_borrow_unguarded() }
+                .unwrap()
+                .clone(),
+        ) as PyBoxedMaterial
     } else if let Ok(dielectric) = item.extract::<Py<Dielectric>>(py) {
-        Arc::new(dielectric) as PyBoxedMaterial
+        Arc::new(
+            unsafe { dielectric.into_ref(py).try_borrow_unguarded() }
+                .unwrap()
+                .clone(),
+        ) as PyBoxedMaterial
     } else if let Ok(metal) = item.extract::<Py<Metal>>(py) {
-        Arc::new(metal) as PyBoxedMaterial
+        Arc::new(
+            unsafe { metal.into_ref(py).try_borrow_unguarded() }
+                .unwrap()
+                .clone(),
+        ) as PyBoxedMaterial
     } else {
         todo!()
     }

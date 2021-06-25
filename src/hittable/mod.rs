@@ -191,7 +191,7 @@ pub trait Hittable<F: SimdValue, R: Rng>: Bounded {
     {
         Hittable::<F, R>::hit(
             &self,
-            &Ray::new(origin.clone(), direction.clone(), F::zero(), mask),
+            &Ray::new(*origin, *direction, F::zero(), mask),
             F::splat(EPSILON),
             F::splat(f32::INFINITY),
         )
@@ -212,14 +212,14 @@ where
     T: Hittable<F, R> + PyClass,
 {
     fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
-        Python::with_gil(|py| self.as_ref(py).borrow().hit(ray, t_min, t_max))
+        Python::with_gil(|py| self.borrow(py).hit(ray, t_min, t_max))
     }
 
     fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
-        Python::with_gil(|py| self.as_ref(py).borrow().pdf_value(origin, direction, mask))
+        Python::with_gil(|py| self.borrow(py).pdf_value(origin, direction, mask))
     }
 
     fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
-        Python::with_gil(|py| self.as_ref(py).borrow().random(rng, origin))
+        Python::with_gil(|py| self.borrow(py).random(rng, origin))
     }
 }

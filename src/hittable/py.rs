@@ -148,8 +148,13 @@ pub fn py_init_hittable(module: &PyModule) -> PyResult<()> {
 
 pub fn to_hittable(py: Python, item: Py<PyAny>) -> PyBoxedHittable {
     if let Ok(sphere) = item.extract::<Py<Sphere>>(py) {
-        Arc::new(sphere) as PyBoxedHittable
+        Arc::new(
+            unsafe { sphere.into_ref(py).try_borrow_unguarded() }
+                .unwrap()
+                .clone(),
+        ) as PyBoxedHittable
     } else {
-        Arc::new(PyHittable::new(item))
+        // Arc::new(PyHittable::new(item))
+        todo!()
     }
 }

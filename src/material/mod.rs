@@ -62,7 +62,7 @@ where
     T: Material<F, R> + PyClass,
 {
     fn emitted(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F> {
-        Python::with_gil(|py| self.as_ref(py).borrow().emitted(uv, p))
+        Python::with_gil(|py| self.borrow(py).emitted(uv, p))
     }
 
     fn scatter(
@@ -71,6 +71,6 @@ where
         hit_record: &HitRecord<F>,
         rng: &mut R,
     ) -> ScatterRecord<F, R> {
-        Python::with_gil(|py| self.as_ref(py).borrow().scatter(r_in, hit_record, rng))
+        Python::with_gil(|py| self.borrow(py).scatter(r_in, hit_record, rng))
     }
 }

@@ -13,9 +13,17 @@ pub fn py_init_texture(module: &PyModule) -> PyResult<()> {
 
 pub fn to_texture(py: Python, item: Py<PyAny>) -> PyBoxedTexture {
     if let Ok(solid_color) = item.extract::<Py<SolidColor>>(py) {
-        Arc::new(solid_color) as PyBoxedTexture
+        Arc::new(
+            unsafe { solid_color.into_ref(py).try_borrow_unguarded() }
+                .unwrap()
+                .clone(),
+        ) as PyBoxedTexture
     } else if let Ok(checker) = item.extract::<Py<PyChecker>>(py) {
-        Arc::new(checker) as PyBoxedTexture
+        Arc::new(
+            unsafe { checker.into_ref(py).try_borrow_unguarded() }
+                .unwrap()
+                .clone(),
+        ) as PyBoxedTexture
     } else {
         todo!()
     }

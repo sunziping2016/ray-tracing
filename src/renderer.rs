@@ -163,11 +163,6 @@ where
                     });
             });
         let mut colors = vec![Vector3::splat(self.scene.background()); rays.len()];
-        // println!(
-        //     "depth: {}  hit rate: {}",
-        //     depth,
-        //     hit_ray_indices.len() as f32 / F::LANES as f32 / rays.len() as f32
-        // );
         if hit_ray_indices.is_empty() {
             return colors;
         }
@@ -410,10 +405,10 @@ impl PyRenderer {
     }
     #[name = "render"]
     fn py_render(&self, py: Python) -> PyResult<PyObject> {
-        let (tx, rx) = async_channel::bounded(1);
-        let inner = self.inner.clone();
+        let (tx, rx) = async_channel::bounded::<Vec<f32>>(1);
         let width = self.inner.param.width as usize;
         let height = self.inner.param.height as usize;
+        let inner = self.inner.clone();
         rayon::spawn(move || {
             let result = inner.render(&mut thread_rng());
             let _ = futures::executor::block_on(

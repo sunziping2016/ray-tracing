@@ -41,6 +41,7 @@ where
 }
 
 #[pyclass(name = "Lambertian")]
+#[derive(Clone)]
 pub struct PyLambertian {
     inner: Lambertian<PyBoxedTexture>,
 }

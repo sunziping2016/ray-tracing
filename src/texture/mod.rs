@@ -16,6 +16,6 @@ where
     T: Texture<F> + PyClass,
 {
     fn value(&self, uv: Vector2<F>, p: Vector3<F>) -> Vector3<F> {
-        Python::with_gil(|py| self.as_ref(py).borrow().value(uv, p))
+        Python::with_gil(|py| self.borrow(py).value(uv, p))
     }
 }
