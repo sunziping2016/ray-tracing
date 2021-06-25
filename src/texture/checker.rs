@@ -24,7 +24,7 @@ impl<F, T1: Texture<F>, T2: Texture<F>> Texture<F> for Checker<T1, T2>
 where
     F: SimdF32Field,
 {
-    fn value(&self, uv: Vector2<F>, p: Vector3<F>) -> Vector3<F> {
+    fn value(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F> {
         let density = F::splat(self.density);
         let sines =
             (density * p[0]).simd_sin() * (density * p[1]).simd_sin() * (density * p[2]).simd_sin();
@@ -41,7 +41,7 @@ pub struct PyChecker {
 }
 
 impl Texture<PySimd> for PyChecker {
-    fn value(&self, uv: Vector2<PySimd>, p: Vector3<PySimd>) -> Vector3<PySimd> {
+    fn value(&self, uv: &Vector2<PySimd>, p: &Vector3<PySimd>) -> Vector3<PySimd> {
         self.inner.value(uv, p)
     }
 }

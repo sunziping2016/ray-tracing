@@ -27,6 +27,7 @@ use v4ray::material::metal::Metal;
 use v4ray::renderer::{RenderResult, Renderer, RendererParam};
 use v4ray::scene::Scene;
 use v4ray::texture::checker::Checker;
+use v4ray::texture::noise::{Noise, Perlin};
 use v4ray::texture::solid_color::SolidColor;
 use v4ray::{SimdBoolField, SimdF32Field};
 
@@ -233,6 +234,21 @@ where
         );
         scene
     }
+    pub fn create_world3<G: Rng>(rng: &mut G) -> Scene<F, R>
+    where
+        F: From<[f32; F::LANES]> + Into<[f32; F::LANES]>,
+    {
+        let mut scene = Scene::new(Vector3::new(1f32, 1f32, 1f32), Zero::zero());
+        scene.add(
+            Arc::new(Sphere::new(Vector3::new(0f32, -1000f32, 0f32), 1000f32)),
+            Arc::new(Lambertian::new(Noise::new(Perlin::new(rng), 4f32, 7))),
+        );
+        scene.add(
+            Arc::new(Sphere::new(Vector3::new(0f32, 2f32, 0f32), 2f32)),
+            Arc::new(Lambertian::new(Noise::new(Perlin::new(rng), 4f32, 7))),
+        );
+        scene
+    }
     pub fn new(param: SceneParam, scene: Scene<F, R>) -> Self {
         let width = param.renderer.width;
         let height = param.renderer.height;
@@ -279,7 +295,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let width = param.renderer.width;
     let height = param.renderer.height;
     let example: Arc<Example<Float, ThreadRng>> =
-        Arc::new(Example::new(param, Example::create_world2(&mut rng)));
+        Arc::new(Example::new(param, Example::create_world3(&mut rng)));
     let (msg_tx, msg_rx) = async_channel::bounded(16);
     let (render_tx, render_rx) = mpsc::channel();
 

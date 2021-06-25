@@ -59,7 +59,7 @@ class Lambertian(MaterialType):
     @staticmethod
     def properties() -> List[AnyProperty]:
         return [
-            TextureProperty(name='质地')
+            TextureProperty(name='纹理')
         ]
 
     @staticmethod

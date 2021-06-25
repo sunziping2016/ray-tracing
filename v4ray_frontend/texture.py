@@ -87,8 +87,8 @@ class Checker(TextureType):
     @staticmethod
     def properties() -> List[AnyProperty]:
         return [
-            TextureProperty(name='质地1'),
-            TextureProperty(name='质地2'),
+            TextureProperty(name='纹理1'),
+            TextureProperty(name='纹理2'),
             FloatProperty(name='密度', default=1.0)
         ]
 

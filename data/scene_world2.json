@@ -1,0 +1,22 @@
+{
+  "renderer": {
+    "width": 1200,
+    "height": 800,
+    "max_depth": 20
+  },
+  "camera": {
+    "look_from": [
+      -0.5,
+      0.2,
+      -0.5
+    ],
+    "look_at": [
+      -0.01680081,
+      0.11015296,
+      -0.00148226
+    ],
+    "vfov": 20,
+    "aperture": 0,
+    "focus_dist": 1
+  }
+}

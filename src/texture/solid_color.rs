@@ -20,7 +20,7 @@ impl<F> Texture<F> for SolidColor
 where
     F: SimdRealField<Element = f32>,
 {
-    fn value(&self, _uv: Vector2<F>, _p: Vector3<F>) -> Vector3<F> {
+    fn value(&self, _uv: &Vector2<F>, _p: &Vector3<F>) -> Vector3<F> {
         Vector3::splat(self.color)
     }
 }

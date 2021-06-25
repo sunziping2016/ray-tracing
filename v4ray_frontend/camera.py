@@ -33,6 +33,11 @@ class CameraType(ABC):
 
     @staticmethod
     @abstractmethod
+    def apply_preview(data: List[Any]) -> CameraLike:
+        pass
+
+    @staticmethod
+    @abstractmethod
     def to_json(data: List[Any]) -> Dict[str, Any]:
         pass
 
@@ -79,6 +84,19 @@ class PerspectiveCamera(CameraType):
             vfov=data[6],
             up=(data[7], data[8], data[9]),
             aperture=data[10],
+            focus_dist=data[11],
+            time0=data[12],
+            time1=data[13]
+        )
+
+    @staticmethod
+    def apply_preview(data: List[Any]) -> CameraLike:
+        return v4ray.PerspectiveCameraParam(
+            look_from=(data[0], data[1], data[2]),
+            look_at=(data[3], data[4], data[5]),
+            vfov=data[6],
+            up=(data[7], data[8], data[9]),
+            aperture=0.0,
             focus_dist=data[11],
             time0=data[12],
             time1=data[13]

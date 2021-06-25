@@ -22,7 +22,7 @@ impl Dielectric {
 pub fn reflectance<F: SimdRealField<Element = f32>>(cosine: F, ref_idx: F) -> F {
     let r0 = (F::one() - ref_idx) / (F::one() + ref_idx);
     let r0 = r0 * r0;
-    r0 + (F::one() - r0) * (F::one() - cosine).simd_powf(F::splat(5f32))
+    r0 + (F::one() - r0) * (F::one() - cosine).simd_powi(5)
 }
 
 impl<F, R: Rng> Material<F, R> for Dielectric

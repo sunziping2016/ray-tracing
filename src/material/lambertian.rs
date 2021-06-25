@@ -34,7 +34,7 @@ where
         _rng: &mut R,
     ) -> ScatterRecord<F, R> {
         ScatterRecord::Scatter {
-            attenuation: self.texture.value(hit_record.uv, hit_record.p),
+            attenuation: self.texture.value(&hit_record.uv, &hit_record.p),
             pdf: Box::new(CosinePdf::new(hit_record.normal)),
         }
     }

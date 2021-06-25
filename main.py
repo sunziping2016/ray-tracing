@@ -1550,7 +1550,11 @@ class State:
             for s in self.shape_types[obj.shape[0]].apply(obj.shape[1]):
                 scene.add(s, materials[self.inherited_materials[uuid]])
         assert self.camera is not None
-        camera = self.camera_types[self.camera[0]].apply(self.camera[1])
+        if preview:
+            camera = self.camera_types[self.camera[0]] \
+                .apply_preview(self.camera[1])
+        else:
+            camera = self.camera_types[self.camera[0]].apply(self.camera[1])
         renderer = RendererParam(self.renderer.width, self.renderer.height,
                                  1 if preview else self.renderer.max_depth,
                                  not preview)
@@ -1752,6 +1756,7 @@ class MainWindow(QMainWindow):
             self.ui.history.blockSignals(False)
             self.state = self.history[self.current_history].state
             self.state.apply(self)
+            self.update_window_title()
         except IOError:
             self.filename = None
             self.history = OrderedDict()
@@ -1925,20 +1930,21 @@ class MainWindow(QMainWindow):
         filename = QFileDialog.getSaveFileName(
             self, caption='保存项目', filter="v4ray 工程文件 (*.json)",
             options=QFileDialog.DontUseNativeDialog)[0]
-        if filename is not None:
+        if filename:
             self.filename = filename
             self.update_window_title()
             with open(self.filename, 'w') as f:
                 json.dump(self.state.to_json(self.filename), f)
 
     def export(self) -> None:
-        pixmap = self.ui.image.pixmap()
-        if pixmap is None:
+        if self.state.render_result is None:
             return
+        pixmap = State.array_to_pixmap(self.state.render_result[0] /
+                                       self.state.render_result[1])
         filename = QFileDialog.getSaveFileName(
             self, caption='导出图片', filter="图像文件 (*.jpeg *.jpg *.png *.bmp)",
             options=QFileDialog.DontUseNativeDialog)[0]
-        if filename is not None:
+        if filename:
             pixmap.save(filename)
 
     def render_background_set(self) -> None:
@@ -2080,7 +2086,7 @@ class MainWindow(QMainWindow):
             self.set_state(
                 self.state.with_modify_texture(
                     self.state.current_texture, modify),
-                f'修改质地 {name} 的 {field_name}')
+                f'修改纹理 {name} 的 {field_name}')
 
     def material_form_changed(self, index: int, data: Any) -> None:
         def modify(mat: MaterialData) -> None:
@@ -2121,7 +2127,7 @@ class MainWindow(QMainWindow):
             '添加对象组' if group else '添加对象')
 
     def texture_add(self) -> None:
-        self.set_state(self.state.with_add_texture(), '添加质地')
+        self.set_state(self.state.with_add_texture(), '添加纹理')
 
     def material_add(self) -> None:
         self.set_state(self.state.with_add_material(), '添加材料')
@@ -2142,7 +2148,7 @@ class MainWindow(QMainWindow):
         name = self.state.texture_names[uuid]
         self.set_state(
             self.state.with_remove_texture(uuid),
-            f'删除质地 {name}')
+            f'删除纹理 {name}')
 
     def material_remove(self) -> None:
         widget = self.ui.materialList.currentItem()
@@ -2218,7 +2224,7 @@ class MainWindow(QMainWindow):
             assert self.state.current_texture
             name = self.state.texture_names[self.state.current_texture]
             self.set_state(self.state.with_modify_texture(
-                self.state.current_texture, modify), f'修改质地 {name} 的类型')
+                self.state.current_texture, modify), f'修改纹理 {name} 的类型')
 
         QTimer.singleShot(0, update_state)
 
@@ -2287,7 +2293,7 @@ class MainWindow(QMainWindow):
         if name == self.ui.textureName.text():
             return
         self.set_state(self.state.with_modify_texture(
-            self.state.current_texture, modify), f'修改质地 {name} 的名字')
+            self.state.current_texture, modify), f'修改纹理 {name} 的名字')
 
     def material_name_changed(self) -> None:
         def modify(mat: MaterialData) -> None:

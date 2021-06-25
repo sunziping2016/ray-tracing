@@ -11,7 +11,6 @@ use crate::{SimdBoolField, SimdF32Field};
 use arrayvec::ArrayVec;
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector2, Vector3};
-use num_traits::{cast, clamp};
 use numpy::PyArray;
 use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::{IntoPy, PyObject, PyResult, Python};
@@ -21,6 +20,10 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use std::{array, iter};
 
+fn some_true() -> Option<bool> {
+    Some(true)
+}
+
 #[pyclass(name = "RendererParam")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RendererParam {
@@ -28,7 +31,7 @@ pub struct RendererParam {
     pub height: u32,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub max_depth: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing_if = "Option::is_none", default = "some_true")]
     pub antialias: Option<bool>,
 }
 
@@ -340,11 +343,14 @@ impl<F> RenderResult<F> {
         lock.1 += 1;
         lock.1
     }
+    #[cfg(feature = "gtk-frontend")]
     #[allow(clippy::needless_collect)]
     pub fn get(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
     where
         F: SimdRealField<Element = f32>,
     {
+        use num_traits::{cast, clamp};
+
         let lock = self.result.read().unwrap();
         let new_last = lock.1;
         if new_last <= last {

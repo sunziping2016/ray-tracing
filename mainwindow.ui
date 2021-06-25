@@ -371,7 +371,7 @@
   </widget>
   <widget class="QDockWidget" name="dockTexture">
    <property name="windowTitle">
-    <string>质地</string>
+    <string>纹理</string>
    </property>
    <attribute name="dockWidgetArea">
     <number>2</number>
@@ -433,7 +433,7 @@
      <item>
       <widget class="QGroupBox" name="textureProperties">
        <property name="title">
-        <string>质地属性</string>
+        <string>纹理属性</string>
        </property>
        <layout class="QFormLayout" name="formLayout_3">
         <item row="1" column="0">
@@ -501,7 +501,7 @@
           <x>0</x>
           <y>0</y>
           <width>274</width>
-          <height>596</height>
+          <height>535</height>
          </rect>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_6">
