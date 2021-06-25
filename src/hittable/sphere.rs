@@ -28,8 +28,8 @@ pub fn sphere_uv<F>(p: &Vector3<F>) -> (F, F)
 where
     F: SimdRealField,
 {
-    let theta = -p[1].simd_acos();
-    let phi = (-p[2]).simd_atan2(p[1]) + F::simd_pi();
+    let theta = (-p[1]).simd_acos();
+    let phi = (-p[2]).simd_atan2(p[0]) + F::simd_pi();
     (phi / F::simd_two_pi(), theta * F::simd_frac_1_pi())
 }
 

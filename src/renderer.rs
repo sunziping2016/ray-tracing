@@ -82,7 +82,7 @@ where
         let width = self.param.width as f32;
         let height = self.param.height as f32;
         let (xs, ys): (Vec<_>, Vec<_>) =
-            iproduct!((0..self.param.height).rev(), (0..self.param.width).rev())
+            iproduct!((0..self.param.height).rev(), 0..self.param.width)
                 .map(|(j, i)| {
                     if let Some(false) = self.param.antialias {
                         (i as f32 / width, j as f32 / height)

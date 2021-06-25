@@ -1,4 +1,5 @@
 pub mod checker;
+pub mod image;
 pub mod noise;
 pub mod py;
 pub mod solid_color;

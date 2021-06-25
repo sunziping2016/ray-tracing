@@ -4,6 +4,7 @@
 #![feature(generic_associated_types)]
 #![feature(never_type)]
 #![feature(associated_type_defaults)]
+#![feature(array_map)]
 
 use crate::hittable::Hittable;
 use crate::material::Material;

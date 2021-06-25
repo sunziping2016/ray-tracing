@@ -5,6 +5,7 @@
 
 use async_channel::Sender;
 use gtk::{ContainerExt, FrameExt, GtkWindowExt, ImageExt, WidgetExt};
+use image::io::Reader as ImageReader;
 use nalgebra::{SimdRealField, Vector3};
 use num_traits::Zero;
 use rand::rngs::ThreadRng;
@@ -19,14 +20,17 @@ use std::process;
 use std::sync::{mpsc, Arc};
 use std::time::SystemTime;
 use v4ray::camera::CameraParam;
+use v4ray::hittable::aa_rect::{XYRect, YZRect, ZXRect};
 use v4ray::hittable::sphere::Sphere;
 use v4ray::hittable::triangle::Triangle;
 use v4ray::material::dielectric::Dielectric;
+use v4ray::material::diffuse_light::DiffuseLight;
 use v4ray::material::lambertian::Lambertian;
 use v4ray::material::metal::Metal;
 use v4ray::renderer::{RenderResult, Renderer, RendererParam};
 use v4ray::scene::Scene;
 use v4ray::texture::checker::Checker;
+use v4ray::texture::image::ImageTexture;
 use v4ray::texture::noise::{Noise, Perlin};
 use v4ray::texture::solid_color::SolidColor;
 use v4ray::{SimdBoolField, SimdF32Field};
@@ -238,14 +242,62 @@ where
     where
         F: From<[f32; F::LANES]> + Into<[f32; F::LANES]>,
     {
-        let mut scene = Scene::new(Vector3::new(1f32, 1f32, 1f32), Zero::zero());
+        let mut scene = Scene::new(Vector3::new(0f32, 0f32, 0f32), Zero::zero());
         scene.add(
             Arc::new(Sphere::new(Vector3::new(0f32, -1000f32, 0f32), 1000f32)),
-            Arc::new(Lambertian::new(Noise::new(Perlin::new(rng), 4f32, 7))),
+            Arc::new(Lambertian::new(Noise::new(Perlin::new(rng), 2f32, 7))),
         );
         scene.add(
             Arc::new(Sphere::new(Vector3::new(0f32, 2f32, 0f32), 2f32)),
-            Arc::new(Lambertian::new(Noise::new(Perlin::new(rng), 4f32, 7))),
+            Arc::new(Lambertian::new(ImageTexture::new(
+                ImageReader::open("data/earthmap.jpg")
+                    .unwrap()
+                    .decode()
+                    .unwrap(),
+            ))),
+        );
+        scene.add(
+            Arc::new(XYRect::new(3f32, 5f32, 1f32, 3f32, -2f32, true)),
+            Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(
+                4f32, 4f32, 4f32,
+            )))),
+        );
+        scene
+    }
+    pub fn create_world4<G: Rng>(_rng: &mut G) -> Scene<F, R> {
+        let mut scene = Scene::new(Vector3::new(0f32, 0f32, 0f32), Zero::zero());
+        scene.add(
+            Arc::new(YZRect::new(0., 555., 0., 555., 555., false)),
+            Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
+                0.12, 0.45, 0.15,
+            )))),
+        );
+        scene.add(
+            Arc::new(YZRect::new(0., 555., 0., 555., 0., true)),
+            Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
+                0.65, 0.05, 0.05,
+            )))),
+        );
+        scene.add(
+            Arc::new(ZXRect::new(227., 332., 213., 343., 554., false)),
+            Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(
+                15., 15., 15.,
+            )))),
+        );
+        let white = Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
+            0.73, 0.73, 0.73,
+        ))));
+        scene.add(
+            Arc::new(ZXRect::new(0., 555., 0., 555., 0., true)),
+            white.clone(),
+        );
+        scene.add(
+            Arc::new(ZXRect::new(0., 555., 0., 555., 555., false)),
+            white.clone(),
+        );
+        scene.add(
+            Arc::new(XYRect::new(0., 555., 0., 555., 555., false)),
+            white,
         );
         scene
     }
@@ -295,7 +347,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let width = param.renderer.width;
     let height = param.renderer.height;
     let example: Arc<Example<Float, ThreadRng>> =
-        Arc::new(Example::new(param, Example::create_world3(&mut rng)));
+        Arc::new(Example::new(param, Example::create_world4(&mut rng)));
     let (msg_tx, msg_rx) = async_channel::bounded(16);
     let (render_tx, render_rx) = mpsc::channel();
 
