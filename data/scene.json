@@ -6,9 +6,9 @@
   },
   "camera": {
     "look_from": [
-      -13,
-      2,
-      -13
+      0,
+      5,
+      23
     ],
     "look_at": [
       0,
@@ -16,7 +16,7 @@
       0
     ],
     "vfov": 20,
-    "aperture": 0.1,
+    "aperture": 0,
     "focus_dist": 10
   }
 }
