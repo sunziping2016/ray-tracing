@@ -1,22 +1,21 @@
 {
   "renderer": {
-    "width": 1200,
+    "width": 800,
     "height": 800,
     "max_depth": 50
   },
   "camera": {
     "look_from": [
-      0,
-      5,
-      23
+      278,
+      278,
+      -800
     ],
     "look_at": [
-      0,
-      0,
+      278,
+      278,
       0
     ],
-    "vfov": 20,
-    "aperture": 0,
-    "focus_dist": 10
+    "vfov": 40,
+    "aperture": 0
   }
 }

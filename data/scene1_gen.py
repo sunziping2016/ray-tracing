@@ -14,7 +14,7 @@ def main() -> None:
     render['background'] = '#ffffff'
     camera = data.setdefault('camera', {})
     camera['type'] = 'perspective'
-    camera['look_from'] = [13.0, 2.0, -3.0]
+    camera['look_from'] = [13.0, 2.0, 3.0]
     camera['look_at'] = [0.0, 0.0, 0.0]
     camera['vfov'] = 20.0
     camera['up'] = [0.0, 1.0, 0.0]
