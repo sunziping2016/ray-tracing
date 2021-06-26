@@ -1,7 +1,7 @@
 use crate::texture::Texture;
 use crate::SimdF32Field;
 use image::{GenericImageView, Pixel};
-use nalgebra::{SimdBool, Vector2, Vector3};
+use nalgebra::{Point3, SimdBool, Vector2, Vector3};
 use num_traits::NumCast;
 use std::array::IntoIter;
 
@@ -22,7 +22,7 @@ where
     F: SimdF32Field + Into<[f32; F::LANES]> + From<[f32; F::LANES]>,
 {
     #[allow(clippy::many_single_char_names, clippy::uninit_assumed_init)]
-    fn value(&self, uv: &Vector2<F>, _p: &Vector3<F>) -> Vector3<F> {
+    fn value(&self, uv: &Vector2<F>, _p: &Point3<F>) -> Vector3<F> {
         let u = uv[0].is_simd_negative().if_else(F::zero, || {
             uv[0].simd_gt(F::one()).if_else(F::one, || uv[0])
         });

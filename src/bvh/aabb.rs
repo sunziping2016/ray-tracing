@@ -1,12 +1,12 @@
 use crate::py::PyVector3;
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use pyo3::proc_macro::{pyclass, pymethods};
 
 #[pyclass(name = "AABB")]
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
-    pub min: Vector3<f32>,
-    pub max: Vector3<f32>,
+    pub min: Point3<f32>,
+    pub max: Point3<f32>,
 }
 
 #[pymethods]
@@ -14,8 +14,8 @@ impl AABB {
     #[new]
     fn py_new(min: PyVector3, max: PyVector3) -> Self {
         Self::with_bounds(
-            Vector3::new(min.0, min.1, min.2),
-            Vector3::new(max.0, max.1, max.2),
+            Point3::new(min.0, min.1, min.2),
+            Point3::new(max.0, max.1, max.2),
         )
     }
     #[getter("min")]
@@ -29,13 +29,13 @@ impl AABB {
 }
 
 impl AABB {
-    pub fn with_bounds(min: Vector3<f32>, max: Vector3<f32>) -> Self {
+    pub fn with_bounds(min: Point3<f32>, max: Point3<f32>) -> Self {
         Self { min, max }
     }
     pub fn empty() -> Self {
         Self {
-            min: Vector3::from_element(f32::INFINITY),
-            max: Vector3::from_element(f32::NEG_INFINITY),
+            min: Point3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
+            max: Point3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
         }
     }
     pub fn is_empty(&self) -> bool {
@@ -46,7 +46,7 @@ impl AABB {
         let max = self.max.sup(&other.max);
         Self { min, max }
     }
-    pub fn grow(&self, other: &Vector3<f32>) -> Self {
+    pub fn grow(&self, other: &Point3<f32>) -> Self {
         let min = self.min.inf(other);
         let max = self.max.sup(other);
         Self { min, max }
@@ -54,7 +54,7 @@ impl AABB {
     pub fn size(&self) -> Vector3<f32> {
         self.max - self.min
     }
-    pub fn center(&self) -> Vector3<f32> {
+    pub fn center(&self) -> Point3<f32> {
         self.min + self.size().scale(0.5)
     }
     pub fn surface_area(&self) -> f32 {

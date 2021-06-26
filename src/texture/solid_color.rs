@@ -1,6 +1,6 @@
 use crate::py::PyVector3;
 use crate::texture::Texture;
-use nalgebra::{SimdRealField, SimdValue, Vector2, Vector3};
+use nalgebra::{Point3, SimdRealField, SimdValue, Vector2, Vector3};
 use pyo3::proc_macro::{pyclass, pymethods};
 
 #[pyclass(name = "SolidColor")]
@@ -20,7 +20,7 @@ impl<F> Texture<F> for SolidColor
 where
     F: SimdRealField<Element = f32>,
 {
-    fn value(&self, _uv: &Vector2<F>, _p: &Vector3<F>) -> Vector3<F> {
+    fn value(&self, _uv: &Vector2<F>, _p: &Point3<F>) -> Vector3<F> {
         Vector3::splat(self.color)
     }
 }

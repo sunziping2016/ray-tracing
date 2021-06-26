@@ -3,7 +3,7 @@ use crate::simd::MySimdVector;
 use crate::texture::Texture;
 use arrayvec::ArrayVec;
 use itertools::{iproduct, izip};
-use nalgebra::{SimdRealField, Vector2, Vector3};
+use nalgebra::{Point3, SimdRealField, Vector2, Vector3};
 use rand::Rng;
 use std::array::IntoIter;
 
@@ -162,8 +162,10 @@ where
     F: SimdRealField<Element = f32> + MySimdVector + Into<[f32; F::LANES]> + From<[f32; F::LANES]>,
 {
     // TODO: add fn
-    fn value(&self, _uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F> {
-        Vector3::from_element(F::one())
-            .scale(self.noise.turb(&p.scale(F::splat(self.scale)), self.depth))
+    fn value(&self, _uv: &Vector2<F>, p: &Point3<F>) -> Vector3<F> {
+        Vector3::from_element(F::one()).scale(
+            self.noise
+                .turb(&p.coords.scale(F::splat(self.scale)), self.depth),
+        )
     }
 }

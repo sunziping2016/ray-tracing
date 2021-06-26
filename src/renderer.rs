@@ -14,6 +14,7 @@ use crate::{SimdBoolField, SimdF32Field};
 use arrayvec::ArrayVec;
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector2, Vector3};
+use num_traits::{cast, clamp};
 use numpy::PyArray;
 use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::{IntoPy, PyObject, PyResult, Python};
@@ -228,40 +229,6 @@ where
                                         / mixed_pdf.value(&direction);
                                     let ray =
                                         Ray::new(hit_record.p, direction, *ray.time(), ray.mask());
-                                    use nalgebra::SimdBool;
-                                    if (ray.mask() & (coef[0].simd_ne(coef[0]))).any() {
-                                        println!(
-                                            "{:?} {:?} {:?} {:?}",
-                                            coef[0],
-                                            pdf.value(&direction),
-                                            HittablesPdf::new(hit_record.p, self.scene.lights())
-                                                .value(&direction),
-                                            mixed_pdf.value(&direction)
-                                        );
-                                    }
-                                    if (ray.mask() & (coef[1].simd_ne(coef[1]))).any() {
-                                        println!(
-                                            "{:?} {:?} {:?} {:?}",
-                                            coef[1],
-                                            pdf.value(&direction),
-                                            HittablesPdf::new(hit_record.p, self.scene.lights())
-                                                .value(&direction),
-                                            mixed_pdf.value(&direction)
-                                        );
-                                    }
-                                    if (ray.mask() & (coef[2].simd_ne(coef[2]))).any() {
-                                        println!(
-                                            "{:?} {:?} {:?} {:?}",
-                                            coef[2],
-                                            pdf.value(&direction),
-                                            HittablesPdf::new(hit_record.p, self.scene.lights())
-                                                .value(&direction),
-                                            mixed_pdf.value(&direction)
-                                        );
-                                    }
-                                    assert!((ray.mask() & (coef[0].simd_ne(coef[0]))).none());
-                                    assert!((ray.mask() & (coef[1].simd_ne(coef[1]))).none());
-                                    assert!((ray.mask() & (coef[2].simd_ne(coef[2]))).none());
                                     (ray, coef)
                                 } else {
                                     (
@@ -387,14 +354,10 @@ impl<F> RenderResult<F> {
         lock.1 += 1;
         lock.1
     }
-    #[cfg(feature = "gtk-frontend")]
-    #[allow(clippy::needless_collect)]
-    pub fn get(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
+    pub fn get_raw(&self, last: usize) -> Option<(Vec<u8>, usize)>
     where
         F: SimdRealField<Element = f32>,
     {
-        use num_traits::{cast, clamp};
-
         let lock = self.result.read().unwrap();
         let new_last = lock.1;
         if new_last <= last {
@@ -421,18 +384,28 @@ impl<F> RenderResult<F> {
                 .map(|x| cast(clamp(unsafe { x.extract_unchecked(index2) }, min, max)).unwrap());
             (0..3).for_each(|index| bytes[base + index] = color[index]);
         });
-        Some((
-            gdk_pixbuf::Pixbuf::from_bytes(
-                &glib::Bytes::from(bytes.as_slice()),
-                gdk_pixbuf::Colorspace::Rgb,
-                false,
-                8,
-                width as i32,
-                height as i32,
-                width as i32 * 3,
-            ),
-            new_last,
-        ))
+        Some((bytes, new_last))
+    }
+    #[cfg(feature = "gtk-frontend")]
+    #[allow(clippy::needless_collect)]
+    pub fn get_pixbuf(&self, last: usize) -> Option<(gdk_pixbuf::Pixbuf, usize)>
+    where
+        F: SimdRealField<Element = f32>,
+    {
+        self.get_raw(last).map(|(bytes, new_last)| {
+            (
+                gdk_pixbuf::Pixbuf::from_bytes(
+                    &glib::Bytes::from(bytes.as_slice()),
+                    gdk_pixbuf::Colorspace::Rgb,
+                    false,
+                    8,
+                    self.width as i32,
+                    self.height as i32,
+                    self.width as i32 * 3,
+                ),
+                new_last,
+            )
+        })
     }
 }
 

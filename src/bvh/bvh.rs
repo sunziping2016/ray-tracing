@@ -2,7 +2,7 @@ use crate::bvh::aabb::AABB;
 use crate::ray::Ray;
 use crate::simd::MySimdVector;
 use crate::EPSILON;
-use nalgebra::{SimdBool, SimdRealField, SimdValue, Vector3};
+use nalgebra::{Point3, SimdBool, SimdRealField, SimdValue};
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -33,7 +33,7 @@ impl BVHNode {
     }
     fn build(
         shapes: &[AABB],
-        shape_centroids: &[Vector3<f32>],
+        shape_centroids: &[Point3<f32>],
         indices: &[usize],
         parent_index: usize,
         depth: u32,

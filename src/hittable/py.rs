@@ -4,7 +4,7 @@ use crate::hittable::{Bounded, HitRecord, Hittable};
 use crate::py::{bits_to_m, f_to_numpy, PyBoxedHittable, PyRng, PySimd};
 use crate::ray::{PyRay, Ray};
 use crate::simd::MySimdVector;
-use nalgebra::{SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
+use nalgebra::{Point3, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
 use pyo3::proc_macro::pyclass;
 use pyo3::types::PyModule;
 use pyo3::{Py, PyAny, PyObject, PyResult, Python};
@@ -55,14 +55,14 @@ impl Hittable<PySimd, PyRng> for PyHittable {
 
     fn pdf_value(
         &self,
-        _origin: &Vector3<PySimd>,
+        _origin: &Point3<PySimd>,
         _direction: &UnitVector3<PySimd>,
         _mask: <PySimd as SimdValue>::SimdBool,
     ) -> PySimd {
         todo!()
     }
 
-    fn random(&self, _rng: &mut PyRng, _origin: &Vector3<PySimd>) -> Vector3<PySimd> {
+    fn random(&self, _rng: &mut PyRng, _origin: &Point3<PySimd>) -> Vector3<PySimd> {
         todo!()
     }
 }
@@ -113,7 +113,7 @@ impl From<&HitRecord<PySimd>> for PyHitRecord {
 
 impl From<&PyHitRecord> for HitRecord<PySimd> {
     fn from(hit: &PyHitRecord) -> Self {
-        let p = Vector3::new(
+        let p = Point3::new(
             PySimd::from_slice_unaligned(&hit.p[0..PySimd::LANES]),
             PySimd::from_slice_unaligned(&hit.p[PySimd::LANES..(PySimd::LANES * 2)]),
             PySimd::from_slice_unaligned(&hit.p[(PySimd::LANES * 2)..(PySimd::LANES * 3)]),

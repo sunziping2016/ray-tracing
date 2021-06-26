@@ -3,13 +3,13 @@ use crate::hittable::{Bounded, HitRecord, Hittable};
 use crate::random::random_uniform;
 use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field, EPSILON};
-use nalgebra::{SimdBool, SimdValue, UnitVector3};
+use nalgebra::{Point3, SimdBool, SimdValue, UnitVector3};
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct Triangle {
-    vertices: [Vector3<f32>; 3],
+    vertices: [Point3<f32>; 3],
     normals: [Vector3<f32>; 3],
     uvs: [Vector2<f32>; 3],
     // computed
@@ -19,7 +19,7 @@ pub struct Triangle {
 
 impl Triangle {
     pub fn new(
-        vertices: [Vector3<f32>; 3],
+        vertices: [Point3<f32>; 3],
         normals: [Vector3<f32>; 3],
         uvs: [Vector2<f32>; 3],
     ) -> Self {
@@ -61,7 +61,7 @@ where
             return HitRecord::default();
         }
         let inv_det = det.simd_recip();
-        let t_vec = ray.origin() - Vector3::splat(self.vertices[0]);
+        let t_vec = ray.origin() - Point3::splat(self.vertices[0]);
         let u = inv_det * t_vec.dot(&p_vec);
         let mask = mask & !u.is_simd_negative() & u.simd_le(F::one());
         if mask.none() {
@@ -94,7 +94,7 @@ where
         }
     }
 
-    fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
         let hit_record = Hittable::<F, R>::test_hit(self, origin, direction, mask);
         if hit_record.mask.none() {
             return F::zero();
@@ -113,14 +113,15 @@ where
         )
     }
 
-    fn random(&self, rng: &mut R, _origin: &Vector3<F>) -> Vector3<F> {
+    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
         let x = random_uniform::<F, _, _>(EPSILON..(1f32 - EPSILON), rng);
         let y = random_uniform::<F, _, _>(EPSILON..(1f32 - EPSILON), rng);
         let mask = (x + y).simd_gt(F::one());
         let x = mask.if_else(|| F::one() - F::splat(EPSILON) - x, || x);
         let y = mask.if_else(|| F::one() - F::splat(EPSILON) - y, || y);
-        Vector3::splat(self.edge12).scale(x)
+        Point3::splat(self.vertices[0])
+            + Vector3::splat(self.edge12).scale(x)
             + Vector3::splat(self.edge13).scale(y)
-            + Vector3::splat(self.vertices[0])
+            - origin
     }
 }

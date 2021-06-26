@@ -1,16 +1,16 @@
 use crate::pdf::Pdf;
 use crate::BoxedHittable;
-use nalgebra::{SimdRealField, SimdValue, UnitVector3, Vector3};
+use nalgebra::{Point3, SimdRealField, SimdValue, UnitVector3};
 use rand::Rng;
 
 #[derive(Clone)]
 pub struct HittablesPdf<'a, F, R> {
-    origin: Vector3<F>,
+    origin: Point3<F>,
     objects: &'a Vec<BoxedHittable<F, R>>,
 }
 
 impl<'a, F, R> HittablesPdf<'a, F, R> {
-    pub fn new(origin: Vector3<F>, objects: &'a Vec<BoxedHittable<F, R>>) -> Self {
+    pub fn new(origin: Point3<F>, objects: &'a Vec<BoxedHittable<F, R>>) -> Self {
         HittablesPdf { origin, objects }
     }
 }

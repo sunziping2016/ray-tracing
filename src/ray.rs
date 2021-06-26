@@ -3,7 +3,9 @@ use crate::extract;
 use crate::py::{bits_to_m, bits_to_numpy, PySimd};
 use crate::simd::MySimdVector;
 use arrayvec::ArrayVec;
-use nalgebra::{ClosedAdd, Scalar, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector3};
+use nalgebra::{
+    ClosedAdd, Point3, Scalar, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector3,
+};
 use num_traits::{One, Zero};
 use numpy::{PyArray1, PyArray2};
 use pyo3::proc_macro::{pyclass, pymethods};
@@ -11,7 +13,7 @@ use pyo3::Python;
 
 #[derive(Debug, Clone)]
 pub struct Ray<F: SimdValue> {
-    origin: Vector3<F>,
+    origin: Point3<F>,
     direction: UnitVector3<F>,
     time: F,
     mask: F::SimdBool,
@@ -32,7 +34,7 @@ where
         let time = extract!(rays, |x| x.time);
         let mask = extract!(rays, |x| x.mask);
         Self {
-            origin: Vector3::new(F::from(origin_x), F::from(origin_y), F::from(origin_z)),
+            origin: Point3::new(F::from(origin_x), F::from(origin_y), F::from(origin_z)),
             direction: UnitVector3::new_unchecked(Vector3::new(
                 F::from(direction_x),
                 F::from(direction_y),
@@ -52,7 +54,7 @@ where
 {
     fn default() -> Self {
         Self {
-            origin: Zero::zero(),
+            origin: Point3::new(F::zero(), F::zero(), F::zero()),
             direction: UnitVector3::new_unchecked(Vector3::splat(Vector3::x())),
             time: Zero::zero(),
             mask: F::SimdBool::splat(false),
@@ -74,7 +76,7 @@ where
     }
     fn splat(val: Self::Element) -> Self {
         Self::new(
-            Vector3::splat(val.origin),
+            Point3::splat(val.origin),
             UnitVector3::new_unchecked(Vector3::splat(val.direction.into_inner())),
             F::splat(val.time),
             F::SimdBool::splat(val.mask),
@@ -129,7 +131,7 @@ where
 }
 
 impl<F: SimdValue> Ray<F> {
-    pub fn new(origin: Vector3<F>, direction: UnitVector3<F>, time: F, mask: F::SimdBool) -> Self {
+    pub fn new(origin: Point3<F>, direction: UnitVector3<F>, time: F, mask: F::SimdBool) -> Self {
         Ray {
             origin,
             direction,
@@ -137,13 +139,13 @@ impl<F: SimdValue> Ray<F> {
             mask,
         }
     }
-    pub fn at(&self, t: F) -> Vector3<F>
+    pub fn at(&self, t: F) -> Point3<F>
     where
         F: SimdRealField,
     {
         self.origin + self.direction.scale(t)
     }
-    pub fn origin(&self) -> &Vector3<F> {
+    pub fn origin(&self) -> &Point3<F> {
         &self.origin
     }
     pub fn direction(&self) -> &UnitVector3<F> {
@@ -219,7 +221,7 @@ impl From<&Ray<PySimd>> for PyRay {
 
 impl From<&PyRay> for Ray<PySimd> {
     fn from(ray: &PyRay) -> Self {
-        let origin = Vector3::new(
+        let origin = Point3::new(
             PySimd::from_slice_unaligned(&ray.origin[0..PySimd::LANES]),
             PySimd::from_slice_unaligned(&ray.origin[PySimd::LANES..(PySimd::LANES * 2)]),
             PySimd::from_slice_unaligned(&ray.origin[(PySimd::LANES * 2)..(PySimd::LANES * 3)]),

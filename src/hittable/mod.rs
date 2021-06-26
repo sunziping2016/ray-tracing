@@ -1,6 +1,7 @@
 pub mod aa_rect;
 pub mod py;
 pub mod sphere;
+pub mod transform;
 pub mod triangle;
 
 use crate::bvh::aabb::AABB;
@@ -10,14 +11,14 @@ use crate::SimdF32Field;
 use crate::{extract, EPSILON};
 use arrayvec::ArrayVec;
 use auto_impl::auto_impl;
-use nalgebra::{ClosedAdd, Scalar, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
+use nalgebra::{ClosedAdd, Point3, Scalar, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
 use num_traits::Zero;
 use pyo3::{Py, PyClass, Python};
 use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct HitRecord<F: SimdValue> {
-    pub p: Vector3<F>,
+    pub p: Point3<F>,
     pub normal: UnitVector3<F>,
     pub t: F,
     pub uv: Vector2<F>,
@@ -43,7 +44,7 @@ where
         let front_face = extract!(records, |x| x.front_face);
         let mask = extract!(records, |x| x.mask);
         Self {
-            p: Vector3::new(F::from(p_x), F::from(p_y), F::from(p_z)),
+            p: Point3::new(F::from(p_x), F::from(p_y), F::from(p_z)),
             normal: UnitVector3::new_unchecked(Vector3::new(
                 F::from(normal_x),
                 F::from(normal_y),
@@ -71,7 +72,7 @@ where
     }
     fn splat(val: Self::Element) -> Self {
         Self {
-            p: Vector3::splat(val.p),
+            p: Point3::splat(val.p),
             normal: UnitVector3::new_unchecked(Vector3::splat(val.normal.into_inner())),
             t: F::splat(val.t),
             uv: Vector2::splat(val.uv),
@@ -160,7 +161,7 @@ where
 {
     fn default() -> Self {
         Self {
-            p: Zero::zero(),
+            p: Point3::new(F::zero(), F::zero(), F::zero()),
             normal: UnitVector3::new_unchecked(Vector3::splat(Vector3::y())),
             t: F::splat(f32::INFINITY),
             uv: Zero::zero(),
@@ -178,12 +179,12 @@ pub trait Bounded {
 #[auto_impl(&, &mut, Box, Rc, Arc)]
 pub trait Hittable<F: SimdValue, R: Rng>: Bounded {
     fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F>;
-    fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F;
-    fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F>;
+    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F;
+    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F>;
 
     fn test_hit(
         &self,
-        origin: &Vector3<F>,
+        origin: &Point3<F>,
         direction: &UnitVector3<F>,
         mask: F::SimdBool,
     ) -> HitRecord<F>
@@ -216,11 +217,11 @@ where
         Python::with_gil(|py| self.borrow(py).hit(ray, t_min, t_max))
     }
 
-    fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
         Python::with_gil(|py| self.borrow(py).pdf_value(origin, direction, mask))
     }
 
-    fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
+    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
         Python::with_gil(|py| self.borrow(py).random(rng, origin))
     }
 }

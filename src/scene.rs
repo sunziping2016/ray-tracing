@@ -30,7 +30,17 @@ impl<F, R: Rng> Scene<F, R> {
     }
     pub fn add(&mut self, hittable: BoxedHittable<F, R>, material: BoxedMaterial<F, R>) {
         self.hittables.push(hittable);
-        self.materials.push(material);
+        self.materials.push(material.clone());
+    }
+
+    pub fn add_all<T>(&mut self, hittables: T, material: BoxedMaterial<F, R>)
+    where
+        T: Iterator<Item = BoxedHittable<F, R>>,
+    {
+        hittables.for_each(|hittable| {
+            self.hittables.push(hittable);
+            self.materials.push(material.clone());
+        });
     }
     pub fn add_light(&mut self, hittable: BoxedHittable<F, R>, material: BoxedMaterial<F, R>) {
         self.hittables.push(hittable.clone());

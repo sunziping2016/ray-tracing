@@ -1,5 +1,6 @@
 /target
 /data/output.jpeg
+/data/output.bmp
 /venv/
 .mypy_cache
 __pycache__

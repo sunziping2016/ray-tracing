@@ -3,7 +3,7 @@ use crate::hittable::{Bounded, HitRecord, Hittable};
 use crate::random::random_uniform;
 use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field, EPSILON};
-use nalgebra::{SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
+use nalgebra::{Point3, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
 use rand::Rng;
 
 macro_rules! rect_norm {
@@ -33,41 +33,41 @@ macro_rules! rect_norm {
 macro_rules! rect_bounded {
     ($self:ident $a0:ident $a1:ident $b0:ident $b1:ident 0 1 2) => {
         AABB::with_bounds(
-            Vector3::new($self.$a0, $self.$b0, $self.k - EPSILON),
-            Vector3::new($self.$a1, $self.$b1, $self.k + EPSILON),
+            Point3::new($self.$a0, $self.$b0, $self.k - EPSILON),
+            Point3::new($self.$a1, $self.$b1, $self.k + EPSILON),
         )
     };
     ($self:ident $a0:ident $a1:ident $b0:ident $b1:ident 1 2 0) => {
         AABB::with_bounds(
-            Vector3::new($self.k - EPSILON, $self.$a0, $self.$b0),
-            Vector3::new($self.k + EPSILON, $self.$a1, $self.$b1),
+            Point3::new($self.k - EPSILON, $self.$a0, $self.$b0),
+            Point3::new($self.k + EPSILON, $self.$a1, $self.$b1),
         )
     };
     ($self:ident $a0:ident $a1:ident $b0:ident $b1:ident 2 0 1) => {
         AABB::with_bounds(
-            Vector3::new($self.$b0, $self.k - EPSILON, $self.$a0),
-            Vector3::new($self.$b1, $self.k + EPSILON, $self.$a1),
+            Point3::new($self.$b0, $self.k - EPSILON, $self.$a0),
+            Point3::new($self.$b1, $self.k + EPSILON, $self.$a1),
         )
     };
 }
 
 macro_rules! rect_random {
     ($self:ident $rng:ident $a0:ident $a1:ident $b0:ident $b1:ident 0 1 2) => {
-        Vector3::new(
+        Point3::new(
             random_uniform::<F, _, _>($self.$a0..=$self.$a1, $rng),
             random_uniform::<F, _, _>($self.$b0..=$self.$b1, $rng),
             F::splat($self.k),
         )
     };
     ($self:ident $rng:ident $a0:ident $a1:ident $b0:ident $b1:ident 1 2 0) => {
-        Vector3::new(
+        Point3::new(
             F::splat($self.k),
             random_uniform::<F, _, _>($self.$a0..=$self.$a1, $rng),
             random_uniform::<F, _, _>($self.$b0..=$self.$b1, $rng),
         )
     };
     ($self:ident $rng:ident $a0:ident $a1:ident $b0:ident $b1:ident 2 0 1) => {
-        Vector3::new(
+        Point3::new(
             random_uniform::<F, _, _>($self.$b0..=$self.$b1, $rng),
             F::splat($self.k),
             random_uniform::<F, _, _>($self.$a0..=$self.$a1, $rng),
@@ -145,7 +145,7 @@ macro_rules! rect_shape {
 
             fn pdf_value(
                 &self,
-                origin: &Vector3<F>,
+                origin: &Point3<F>,
                 direction: &UnitVector3<F>,
                 mask: <F as SimdValue>::SimdBool,
             ) -> F {
@@ -167,7 +167,7 @@ macro_rules! rect_shape {
                 )
             }
 
-            fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
+            fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
                 let random_point = rect_random!(self rng $a0 $a1 $b0 $b1 $idx0 $idx1 $idx2);
                 random_point - origin
             }

@@ -2,7 +2,7 @@ use crate::py::PyVector3;
 use crate::random::{random_in_unit_disk, random_uniform};
 use crate::ray::Ray;
 use crate::simd::MySimdVector;
-use nalgebra::SimdValue;
+use nalgebra::{Point3, SimdValue};
 use nalgebra::{SimdRealField, Unit, Vector2, Vector3};
 use pyo3::proc_macro::{pyclass, pymethods};
 use rand::Rng;
@@ -12,8 +12,8 @@ use std::f32::consts;
 #[pyclass(name = "PerspectiveCameraParam")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CameraParam {
-    pub look_from: Vector3<f32>,
-    pub look_at: Vector3<f32>,
+    pub look_from: Point3<f32>,
+    pub look_at: Point3<f32>,
     pub vfov: f32,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub up: Option<Vector3<f32>>,
@@ -45,8 +45,8 @@ impl CameraParam {
         time1: Option<f32>,
     ) -> Self {
         Self {
-            look_from: Vector3::new(look_from.0, look_from.1, look_from.2),
-            look_at: Vector3::new(look_at.0, look_at.1, look_at.2),
+            look_from: Point3::new(look_from.0, look_from.1, look_from.2),
+            look_at: Point3::new(look_at.0, look_at.1, look_at.2),
             vfov,
             up: up.map(|x| Vector3::new(x.0, x.1, x.2)),
             aspect_ratio,
@@ -60,8 +60,8 @@ impl CameraParam {
 
 #[derive(Debug, Clone)]
 pub struct Camera {
-    origin: Vector3<f32>,
-    lower_left_corner: Vector3<f32>,
+    origin: Point3<f32>,
+    lower_left_corner: Point3<f32>,
     horizontal: Vector3<f32>,
     vertical: Vector3<f32>,
     u: Vector3<f32>, // norm
@@ -113,8 +113,8 @@ impl Camera {
     {
         let rd = random_in_unit_disk::<F, _>(rng).scale(F::splat(self.lens_radius));
         let offset = Vector3::splat(self.u).scale(rd[0]) + Vector3::splat(self.v).scale(rd[1]);
-        let source = Vector3::splat(self.origin) + offset;
-        let target = Vector3::splat(self.lower_left_corner)
+        let source = Point3::splat(self.origin) + offset;
+        let target = Point3::splat(self.lower_left_corner)
             + Vector3::splat(self.horizontal).scale(st[0])
             + Vector3::splat(self.vertical).scale(st[1]);
         Ray::new(

@@ -17,6 +17,7 @@ use std::sync::Arc;
 pub mod bvh;
 pub mod camera;
 pub mod hittable;
+pub mod hittables;
 pub mod material;
 pub mod pdf;
 pub mod py;

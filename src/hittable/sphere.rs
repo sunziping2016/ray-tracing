@@ -5,7 +5,9 @@ use crate::py::{numpy_to_f, PyRng, PySimd, PyVector3};
 use crate::random::random_to_sphere;
 use crate::ray::{PyRay, Ray};
 use crate::{SimdBoolField, SimdF32Field};
-use nalgebra::{Rotation3, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3};
+use nalgebra::{
+    Point3, Rotation3, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3,
+};
 use numpy::PyArray1;
 use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::PyResult;
@@ -14,12 +16,12 @@ use rand::Rng;
 #[pyclass(name = "Sphere")]
 #[derive(Debug, Clone)]
 pub struct Sphere {
-    center: Vector3<f32>,
+    center: Point3<f32>,
     radius: f32,
 }
 
 impl Sphere {
-    pub fn new(center: Vector3<f32>, radius: f32) -> Self {
+    pub fn new(center: Point3<f32>, radius: f32) -> Self {
         Sphere { center, radius }
     }
 }
@@ -47,7 +49,7 @@ where
 {
     #[allow(clippy::many_single_char_names)]
     fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
-        let center = Vector3::splat(self.center);
+        let center = Point3::splat(self.center);
         let oc: Vector3<F> = ray.origin() - center;
         let half_b = oc.dot(ray.direction());
         let c = oc.norm_squared() - F::splat(self.radius * self.radius);
@@ -79,14 +81,14 @@ where
             mask,
         }
     }
-    fn pdf_value(&self, origin: &Vector3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
         let mask = Hittable::<F, R>::test_hit(self, origin, direction, mask).mask;
         if mask.none() {
             return F::zero();
         }
         let cos_theta_max = (F::one()
             - F::splat(self.radius * self.radius)
-                / (Vector3::splat(self.center) - origin).norm_squared())
+                / (Point3::splat(self.center) - origin).norm_squared())
         .simd_sqrt();
         let solid_angle = F::simd_two_pi() * (F::one() - cos_theta_max);
         mask.if_else(
@@ -98,8 +100,8 @@ where
             F::zero,
         )
     }
-    fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
-        let direction = Vector3::splat(self.center) - origin;
+    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
+        let direction = Point3::splat(self.center) - origin;
         let selector = direction.normalize()[0].simd_abs().simd_gt(F::splat(0.9));
         let up = Vector3::new(
             selector.if_else(F::zero, F::one),
@@ -115,7 +117,7 @@ where
 impl Sphere {
     #[new]
     pub fn py_new(center: PyVector3, radius: f32) -> Self {
-        Self::new(Vector3::new(center.0, center.1, center.2), radius)
+        Self::new(Point3::new(center.0, center.1, center.2), radius)
     }
     #[getter("center")]
     pub fn py_center(&self) -> PyVector3 {
