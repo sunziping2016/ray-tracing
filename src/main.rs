@@ -12,9 +12,12 @@ use std::sync::{mpsc, Arc};
 use std::time::{Duration, SystemTime};
 use v4ray::camera::CameraParam;
 use v4ray::hittable::aa_rect::{XYRect, YZRect, ZXRect};
+use v4ray::hittable::constant_medium::ConstantMedium;
 use v4ray::hittable::transform::TransformHittable;
 use v4ray::hittables::cuboid::Cuboid;
+use v4ray::hittables::hittable_list::HittableList;
 use v4ray::material::diffuse_light::DiffuseLight;
+use v4ray::material::isotropic::Isotropic;
 use v4ray::material::lambertian::Lambertian;
 use v4ray::renderer::{RenderResult, Renderer, RendererParam};
 use v4ray::scene::Scene;
@@ -33,27 +36,25 @@ pub struct SceneParam {
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut scene = Scene::new(Vector3::new(0f32, 0f32, 0f32), Zero::zero());
-    scene.add(
-        Arc::new(YZRect::new(0., 555., 0., 555., 555., false)),
-        Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
-            0.12, 0.45, 0.15,
-        )))),
-    );
-    scene.add(
-        Arc::new(YZRect::new(0., 555., 0., 555., 0., true)),
-        Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
-            0.65, 0.05, 0.05,
-        )))),
-    );
-    scene.add_light(
-        Arc::new(ZXRect::new(227., 332., 213., 343., 554., false)),
-        Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(
-            15., 15., 15.,
-        )))),
-    );
+    let red = Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
+        0.65, 0.05, 0.05,
+    ))));
     let white = Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
         0.73, 0.73, 0.73,
     ))));
+    let green = Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
+        0.12, 0.45, 0.15,
+    ))));
+    let light = Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(7., 7., 7.))));
+    scene.add(
+        Arc::new(YZRect::new(0., 555., 0., 555., 555., false)),
+        green,
+    );
+    scene.add(Arc::new(YZRect::new(0., 555., 0., 555., 0., true)), red);
+    scene.add_light(
+        Arc::new(ZXRect::new(113., 443., 127., 432., 554., false)),
+        light,
+    );
     scene.add(
         Arc::new(ZXRect::new(0., 555., 0., 555., 0., true)),
         white.clone(),
@@ -84,22 +85,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }),
         white.clone(),
     );
-    scene.add_all(
-        Cuboid::new(Vector3::new(0., 0., 0.), Vector3::new(165., 165., 165.))
-            .into_iter()
-            .map(|x| {
-                Arc::new(TransformHittable::new(
-                    convert(
-                        Translation3::new(130., 0., 65.)
-                            * Rotation3::from_axis_angle(
-                                &UnitVector3::new_unchecked(Vector3::y()),
-                                -18f32.to_radians(),
+    scene.add(
+        Arc::new(ConstantMedium::new(
+            HittableList::new(
+                Cuboid::new(Vector3::new(0., 0., 0.), Vector3::new(165., 165., 165.))
+                    .into_iter()
+                    .map(|x| {
+                        Arc::new(TransformHittable::new(
+                            convert(
+                                Translation3::new(130., 0., 65.)
+                                    * Rotation3::from_axis_angle(
+                                        &UnitVector3::new_unchecked(Vector3::y()),
+                                        -18f32.to_radians(),
+                                    ),
                             ),
-                    ),
-                    x,
-                )) as BoxedHittable<F, R>
-            }),
-        white,
+                            x,
+                        )) as BoxedHittable<F, R>
+                    })
+                    .collect(),
+            ),
+            0.01,
+        )),
+        Arc::new(Isotropic::new(SolidColor::new(Vector3::new(1., 1., 1.)))),
     );
     let param: SceneParam = serde_json::from_reader(File::open("data/scene.json")?)?;
     let width = param.renderer.width;

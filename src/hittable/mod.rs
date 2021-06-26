@@ -1,4 +1,5 @@
 pub mod aa_rect;
+pub mod constant_medium;
 pub mod py;
 pub mod sphere;
 pub mod transform;
@@ -11,7 +12,9 @@ use crate::SimdF32Field;
 use crate::{extract, EPSILON};
 use arrayvec::ArrayVec;
 use auto_impl::auto_impl;
-use nalgebra::{ClosedAdd, Point3, Scalar, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
+use nalgebra::{
+    ClosedAdd, Point3, Scalar, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3,
+};
 use num_traits::Zero;
 use pyo3::{Py, PyClass, Python};
 use rand::Rng;
@@ -145,11 +148,6 @@ impl<F: SimdF32Field> HitRecord<F> {
         let front_face = direction.dot(&outward_normal).is_simd_negative();
         let outward_normal = outward_normal.into_inner();
         let normal = front_face.if_else(|| outward_normal, || -outward_normal);
-        // let normal = Vector3::new(
-        //     front_face.if_else(|| outward_normal[0], || -outward_normal[0]),
-        //     front_face.if_else(|| outward_normal[1], || -outward_normal[1]),
-        //     front_face.if_else(|| outward_normal[2], || -outward_normal[2]),
-        // );
         (front_face, UnitVector3::new_unchecked(normal))
     }
 }
@@ -177,10 +175,14 @@ pub trait Bounded {
 }
 
 #[auto_impl(&, &mut, Box, Rc, Arc)]
-pub trait Hittable<F: SimdValue, R: Rng>: Bounded {
+pub trait Hittable<F: SimdRealField, R: Rng>: Bounded {
     fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F>;
-    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F;
-    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F>;
+    fn pdf_value(&self, _origin: &Point3<F>, _direction: &UnitVector3<F>, _mask: F::SimdBool) -> F {
+        F::zero()
+    }
+    fn random(&self, _rng: &mut R, _origin: &Point3<F>) -> Vector3<F> {
+        Vector3::new(F::one(), F::zero(), F::zero())
+    }
 
     fn test_hit(
         &self,
@@ -209,7 +211,7 @@ where
     }
 }
 
-impl<T, F: SimdValue, R: Rng> Hittable<F, R> for Py<T>
+impl<T, F: SimdRealField, R: Rng> Hittable<F, R> for Py<T>
 where
     T: Hittable<F, R> + PyClass,
 {
