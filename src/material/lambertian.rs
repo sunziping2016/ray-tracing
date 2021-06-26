@@ -6,10 +6,11 @@ use crate::ray::Ray;
 use crate::texture::py::to_texture;
 use crate::texture::Texture;
 use crate::{SimdBoolField, SimdF32Field};
-use nalgebra::{Vector2, Vector3};
+use nalgebra::Vector3;
 use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::{Py, PyAny, Python};
 use rand::Rng;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Lambertian<T> {
@@ -35,7 +36,7 @@ where
     ) -> ScatterRecord<F, R> {
         ScatterRecord::Scatter {
             attenuation: self.texture.value(&hit_record.uv, &hit_record.p),
-            pdf: Box::new(CosinePdf::new(hit_record.normal)),
+            pdf: Arc::new(CosinePdf::new(hit_record.normal)),
         }
     }
 }
@@ -47,8 +48,8 @@ pub struct PyLambertian {
 }
 
 impl Material<PySimd, PyRng> for PyLambertian {
-    fn emitted(&self, uv: &Vector2<PySimd>, p: &Vector3<PySimd>) -> Vector3<PySimd> {
-        Material::<PySimd, PyRng>::emitted(&self.inner, uv, p)
+    fn emitted(&self, hit_record: &HitRecord<PySimd>) -> Vector3<PySimd> {
+        Material::<PySimd, PyRng>::emitted(&self.inner, hit_record)
     }
 
     fn scatter(

@@ -2,6 +2,9 @@ use crate::bvh::bvh::BVH;
 use crate::camera::{Camera, CameraParam};
 use crate::hittable::HitRecord;
 use crate::material::ScatterRecord;
+use crate::pdf::hittables::HittablesPdf;
+use crate::pdf::mixture::MixturePdf;
+use crate::pdf::Pdf;
 use crate::py::{PyRng, PySimd};
 use crate::ray::Ray;
 use crate::scene::{PyScene, Scene};
@@ -199,7 +202,7 @@ where
                     let ray = Ray::<F>::from(&rays[index1..(index1 + F::LANES)]);
                     let hit_record =
                         HitRecord::<F>::from(&hit_records[index1..(index1 + F::LANES)]);
-                    let emitted = material.emitted(&hit_record.uv, &hit_record.p);
+                    let emitted = material.emitted(&hit_record);
                     let mask = ray.mask();
                     (0..F::LANES)
                         .take_while(|index2| unsafe { mask.extract_unchecked(*index2) })
@@ -212,37 +215,78 @@ where
                                 )
                             }
                         });
-                    let (attenuation, pdf) = {
+                    let (ray, coef) = {
                         match material.scatter(&ray, &hit_record, rng) {
-                            ScatterRecord::Scatter { attenuation, pdf } => (attenuation, pdf),
+                            ScatterRecord::Scatter { attenuation, pdf } => {
+                                if !self.scene.lights().is_empty() {
+                                    let mixed_pdf = MixturePdf::new(
+                                        HittablesPdf::new(hit_record.p, self.scene.lights()),
+                                        pdf.clone(),
+                                    );
+                                    let direction = mixed_pdf.generate(rng);
+                                    let coef = attenuation * pdf.value(&direction)
+                                        / mixed_pdf.value(&direction);
+                                    let ray =
+                                        Ray::new(hit_record.p, direction, *ray.time(), ray.mask());
+                                    use nalgebra::SimdBool;
+                                    if (ray.mask() & (coef[0].simd_ne(coef[0]))).any() {
+                                        println!(
+                                            "{:?} {:?} {:?} {:?}",
+                                            coef[0],
+                                            pdf.value(&direction),
+                                            HittablesPdf::new(hit_record.p, self.scene.lights())
+                                                .value(&direction),
+                                            mixed_pdf.value(&direction)
+                                        );
+                                    }
+                                    if (ray.mask() & (coef[1].simd_ne(coef[1]))).any() {
+                                        println!(
+                                            "{:?} {:?} {:?} {:?}",
+                                            coef[1],
+                                            pdf.value(&direction),
+                                            HittablesPdf::new(hit_record.p, self.scene.lights())
+                                                .value(&direction),
+                                            mixed_pdf.value(&direction)
+                                        );
+                                    }
+                                    if (ray.mask() & (coef[2].simd_ne(coef[2]))).any() {
+                                        println!(
+                                            "{:?} {:?} {:?} {:?}",
+                                            coef[2],
+                                            pdf.value(&direction),
+                                            HittablesPdf::new(hit_record.p, self.scene.lights())
+                                                .value(&direction),
+                                            mixed_pdf.value(&direction)
+                                        );
+                                    }
+                                    assert!((ray.mask() & (coef[0].simd_ne(coef[0]))).none());
+                                    assert!((ray.mask() & (coef[1].simd_ne(coef[1]))).none());
+                                    assert!((ray.mask() & (coef[2].simd_ne(coef[2]))).none());
+                                    (ray, coef)
+                                } else {
+                                    (
+                                        Ray::new(
+                                            hit_record.p,
+                                            pdf.generate(rng),
+                                            *ray.time(),
+                                            ray.mask(),
+                                        ),
+                                        attenuation,
+                                    )
+                                }
+                            }
                             ScatterRecord::Specular {
                                 attenuation,
                                 specular_ray,
-                            } => {
-                                (0..F::lanes())
-                                    .take_while(|index2| unsafe { mask.extract_unchecked(*index2) })
-                                    .for_each(|index2| {
-                                        let ray_index = ray_indices[index1 + index2];
-                                        scattered_rays.push(unsafe {
-                                            specular_ray.extract_unchecked(index2)
-                                        });
-                                        scattered_coef
-                                            .push(unsafe { attenuation.extract_unchecked(index2) });
-                                        scattered_indices.push(ray_index);
-                                    });
-                                return;
-                            }
+                            } => (specular_ray, attenuation),
                             _ => return,
                         }
                     };
-                    let scattered =
-                        Ray::new(hit_record.p, pdf.generate(rng), *ray.time(), ray.mask());
-                    let coef = attenuation;
                     (0..F::lanes())
                         .take_while(|index2| unsafe { mask.extract_unchecked(*index2) })
                         .for_each(|index2| {
                             let ray_index = ray_indices[index1 + index2];
-                            scattered_rays.push(unsafe { scattered.extract_unchecked(index2) });
+                            scattered_rays.push(unsafe { ray.extract_unchecked(index2) });
                             scattered_coef.push(unsafe { coef.extract_unchecked(index2) });
                             scattered_indices.push(ray_index);
                         });

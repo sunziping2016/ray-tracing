@@ -102,7 +102,15 @@ where
         let area = self.edge12.cross(&self.edge13).norm() * 0.5f32;
         let distance_squared = hit_record.t * hit_record.t;
         let cosine = direction.dot(&hit_record.normal).simd_abs();
-        mask.if_else(|| distance_squared / (cosine * F::splat(area)), F::zero)
+        mask.if_else(
+            || {
+                cosine.is_simd_positive().if_else(
+                    || distance_squared / (cosine * F::splat(area)),
+                    || F::splat(f32::INFINITY),
+                )
+            },
+            F::zero,
+        )
     }
 
     fn random(&self, rng: &mut R, _origin: &Vector3<F>) -> Vector3<F> {

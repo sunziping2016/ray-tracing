@@ -278,7 +278,7 @@ where
                 0.65, 0.05, 0.05,
             )))),
         );
-        scene.add(
+        scene.add_light(
             Arc::new(ZXRect::new(227., 332., 213., 343., 554., false)),
             Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(
                 15., 15., 15.,

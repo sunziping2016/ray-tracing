@@ -1,6 +1,7 @@
+use crate::hittable::HitRecord;
 use crate::material::Material;
 use crate::texture::Texture;
-use nalgebra::{SimdRealField, Vector2, Vector3};
+use nalgebra::{SimdBool, SimdRealField, Vector3};
 use rand::Rng;
 
 #[derive(Debug, Clone)]
@@ -15,7 +16,8 @@ impl<T> DiffuseLight<T> {
 }
 
 impl<T: Texture<F>, F: SimdRealField, R: Rng> Material<F, R> for DiffuseLight<T> {
-    fn emitted(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F> {
-        self.emit.value(uv, p)
+    fn emitted(&self, hit_record: &HitRecord<F>) -> Vector3<F> {
+        let color = self.emit.value(&hit_record.uv, &hit_record.p);
+        color.map(|x| hit_record.front_face.if_else(|| x, F::zero))
     }
 }

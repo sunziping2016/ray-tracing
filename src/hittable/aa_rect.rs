@@ -156,7 +156,15 @@ macro_rules! rect_shape {
                 let area = (self.$a1 - self.$a0) * (self.$b1 - self.$b0);
                 let distance_squared = hit_record.t * hit_record.t;
                 let cosine = direction.dot(&hit_record.normal).simd_abs();
-                mask.if_else(|| distance_squared / (cosine * F::splat(area)), F::zero)
+                mask.if_else(
+                    || {
+                        cosine.is_simd_positive().if_else(
+                            || distance_squared / (cosine * F::splat(area)),
+                            || F::splat(f32::INFINITY),
+                        )
+                    },
+                    F::zero,
+                )
             }
 
             fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {

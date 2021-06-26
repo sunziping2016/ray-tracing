@@ -8,10 +8,11 @@ use crate::hittable::HitRecord;
 use crate::pdf::Pdf;
 use crate::ray::Ray;
 use auto_impl::auto_impl;
-use nalgebra::{SimdValue, UnitVector3, Vector2, Vector3};
+use nalgebra::{SimdValue, UnitVector3, Vector3};
 use pyo3::{Py, PyClass, Python};
 use rand::Rng;
 use simba::simd::SimdRealField;
+use std::sync::Arc;
 
 pub enum ScatterRecord<F: SimdValue, R: Rng> {
     Specular {
@@ -20,14 +21,14 @@ pub enum ScatterRecord<F: SimdValue, R: Rng> {
     },
     Scatter {
         attenuation: Vector3<F>,
-        pdf: Box<dyn Pdf<F, R>>,
+        pdf: Arc<dyn Pdf<F, R>>,
     },
     None,
 }
 
 #[auto_impl(&, &mut, Box, Rc, Arc)]
 pub trait Material<F: SimdRealField, R: Rng> {
-    fn emitted(&self, _uv: &Vector2<F>, _p: &Vector3<F>) -> Vector3<F> {
+    fn emitted(&self, _hit_record: &HitRecord<F>) -> Vector3<F> {
         Vector3::from_element(F::zero())
     }
     fn scatter(
@@ -62,8 +63,8 @@ impl<T, F: SimdRealField, R: Rng> Material<F, R> for Py<T>
 where
     T: Material<F, R> + PyClass,
 {
-    fn emitted(&self, uv: &Vector2<F>, p: &Vector3<F>) -> Vector3<F> {
-        Python::with_gil(|py| self.borrow(py).emitted(uv, p))
+    fn emitted(&self, hit_record: &HitRecord<F>) -> Vector3<F> {
+        Python::with_gil(|py| self.borrow(py).emitted(hit_record))
     }
 
     fn scatter(

@@ -89,7 +89,14 @@ where
                 / (Vector3::splat(self.center) - origin).norm_squared())
         .simd_sqrt();
         let solid_angle = F::simd_two_pi() * (F::one() - cos_theta_max);
-        mask.if_else(|| solid_angle.simd_recip(), F::zero)
+        mask.if_else(
+            || {
+                solid_angle
+                    .is_simd_positive()
+                    .if_else(|| solid_angle.simd_recip(), || F::splat(f32::INFINITY))
+            },
+            F::zero,
+        )
     }
     fn random(&self, rng: &mut R, origin: &Vector3<F>) -> Vector3<F> {
         let direction = Vector3::splat(self.center) - origin;
