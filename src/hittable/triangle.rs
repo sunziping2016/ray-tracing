@@ -95,7 +95,12 @@ where
     }
 
     fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
-        let hit_record = Hittable::<F, R>::test_hit(self, origin, direction, mask);
+        let hit_record = Hittable::<F, R>::hit(
+            &self,
+            &Ray::new(*origin, *direction, F::zero(), mask),
+            F::splat(EPSILON),
+            F::splat(f32::INFINITY),
+        );
         if hit_record.mask.none() {
             return F::zero();
         }

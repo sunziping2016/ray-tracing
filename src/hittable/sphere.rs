@@ -4,7 +4,7 @@ use crate::hittable::{Bounded, HitRecord, Hittable};
 use crate::py::{numpy_to_f, PyRng, PySimd, PyVector3};
 use crate::random::random_to_sphere;
 use crate::ray::{PyRay, Ray};
-use crate::{SimdBoolField, SimdF32Field};
+use crate::{SimdBoolField, SimdF32Field, EPSILON};
 use nalgebra::{
     Point3, Rotation3, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3,
 };
@@ -82,7 +82,13 @@ where
         }
     }
     fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
-        let mask = Hittable::<F, R>::test_hit(self, origin, direction, mask).mask;
+        let mask = Hittable::<F, R>::hit(
+            &self,
+            &Ray::new(*origin, *direction, F::zero(), mask),
+            F::splat(EPSILON),
+            F::splat(f32::INFINITY),
+        )
+        .mask;
         if mask.none() {
             return F::zero();
         }

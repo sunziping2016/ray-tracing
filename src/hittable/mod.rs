@@ -6,10 +6,10 @@ pub mod transform;
 pub mod triangle;
 
 use crate::bvh::aabb::AABB;
+use crate::extract;
 use crate::ray::Ray;
 use crate::simd::MySimdVector;
 use crate::SimdF32Field;
-use crate::{extract, EPSILON};
 use arrayvec::ArrayVec;
 use auto_impl::auto_impl;
 use nalgebra::{
@@ -182,23 +182,6 @@ pub trait Hittable<F: SimdRealField, R: Rng>: Bounded {
     }
     fn random(&self, _rng: &mut R, _origin: &Point3<F>) -> Vector3<F> {
         Vector3::new(F::one(), F::zero(), F::zero())
-    }
-
-    fn test_hit(
-        &self,
-        origin: &Point3<F>,
-        direction: &UnitVector3<F>,
-        mask: F::SimdBool,
-    ) -> HitRecord<F>
-    where
-        F: SimdF32Field,
-    {
-        Hittable::<F, R>::hit(
-            &self,
-            &Ray::new(*origin, *direction, F::zero(), mask),
-            F::splat(EPSILON),
-            F::splat(f32::INFINITY),
-        )
     }
 }
 

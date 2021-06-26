@@ -149,7 +149,12 @@ macro_rules! rect_shape {
                 direction: &UnitVector3<F>,
                 mask: <F as SimdValue>::SimdBool,
             ) -> F {
-                let hit_record = Hittable::<F, R>::test_hit(self, origin, direction, mask);
+                let hit_record = Hittable::<F, R>::hit(
+                    &self,
+                    &Ray::new(*origin, *direction, F::zero(), mask),
+                    F::splat(EPSILON),
+                    F::splat(f32::INFINITY),
+                );
                 if hit_record.mask.none() {
                     return F::zero();
                 }

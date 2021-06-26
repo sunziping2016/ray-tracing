@@ -1,6 +1,6 @@
 use async_std::task;
 use image::{ImageBuffer, Rgb};
-use nalgebra::{convert, Rotation3, Translation3, UnitVector3, Vector3};
+use nalgebra::{convert, Point3, Rotation3, Translation3, UnitVector3, Vector3};
 use num_traits::Zero;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
@@ -12,12 +12,11 @@ use std::sync::{mpsc, Arc};
 use std::time::{Duration, SystemTime};
 use v4ray::camera::CameraParam;
 use v4ray::hittable::aa_rect::{XYRect, YZRect, ZXRect};
-use v4ray::hittable::constant_medium::ConstantMedium;
+use v4ray::hittable::sphere::Sphere;
 use v4ray::hittable::transform::TransformHittable;
 use v4ray::hittables::cuboid::Cuboid;
-use v4ray::hittables::hittable_list::HittableList;
+use v4ray::material::dielectric::Dielectric;
 use v4ray::material::diffuse_light::DiffuseLight;
-use v4ray::material::isotropic::Isotropic;
 use v4ray::material::lambertian::Lambertian;
 use v4ray::renderer::{RenderResult, Renderer, RendererParam};
 use v4ray::scene::Scene;
@@ -45,14 +44,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let green = Arc::new(Lambertian::new(SolidColor::new(Vector3::new(
         0.12, 0.45, 0.15,
     ))));
-    let light = Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(7., 7., 7.))));
+    let light = Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(
+        15., 15., 15.,
+    ))));
     scene.add(
         Arc::new(YZRect::new(0., 555., 0., 555., 555., false)),
         green,
     );
     scene.add(Arc::new(YZRect::new(0., 555., 0., 555., 0., true)), red);
     scene.add_light(
-        Arc::new(ZXRect::new(113., 443., 127., 432., 554., false)),
+        Arc::new(ZXRect::new(213., 343., 227., 332., 554., false)),
         light,
     );
     scene.add(
@@ -86,27 +87,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         white.clone(),
     );
     scene.add(
-        Arc::new(ConstantMedium::new(
-            HittableList::new(
-                Cuboid::new(Vector3::new(0., 0., 0.), Vector3::new(165., 165., 165.))
-                    .into_iter()
-                    .map(|x| {
-                        Arc::new(TransformHittable::new(
-                            convert(
-                                Translation3::new(130., 0., 65.)
-                                    * Rotation3::from_axis_angle(
-                                        &UnitVector3::new_unchecked(Vector3::y()),
-                                        -18f32.to_radians(),
-                                    ),
-                            ),
-                            x,
-                        )) as BoxedHittable<F, R>
-                    })
-                    .collect(),
-            ),
-            0.01,
-        )),
-        Arc::new(Isotropic::new(SolidColor::new(Vector3::new(1., 1., 1.)))),
+        Arc::new(Sphere::new(Point3::new(190., 90., 190.), 90.0)),
+        Arc::new(Dielectric::new(1.5)),
     );
     let param: SceneParam = serde_json::from_reader(File::open("data/scene.json")?)?;
     let width = param.renderer.width;

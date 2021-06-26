@@ -156,17 +156,12 @@ impl BVHNode {
 #[derive(Debug, Clone)]
 pub struct BVH {
     nodes: Vec<BVHNode>,
-    #[allow(dead_code)] // FIXME
-    node_indices: Vec<usize>,
 }
 
 impl BVH {
     pub fn build(shapes: &[AABB]) -> Self {
         if shapes.is_empty() {
-            return Self {
-                nodes: Vec::new(),
-                node_indices: Vec::new(),
-            };
+            return Self { nodes: Vec::new() };
         }
         let shape_centroids = shapes.iter().map(|x| x.center()).collect::<Vec<_>>();
         let indices = (0..shapes.len()).collect::<Vec<_>>();
@@ -181,10 +176,7 @@ impl BVH {
             &mut nodes,
             &mut node_indices,
         );
-        Self {
-            nodes,
-            node_indices,
-        }
+        Self { nodes }
     }
     #[allow(clippy::uninit_assumed_init)]
     pub fn traverse<F: SimdValue>(&self, ray: &Ray<F>, t_min: F, t_max: F) -> [Vec<usize>; F::LANES]
