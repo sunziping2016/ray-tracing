@@ -179,9 +179,9 @@ macro_rules! rect_shape {
                 )
             }
 
-            fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
+            fn generate(&self, origin: &Point3<F>, rng: &mut R) -> UnitVector3<F> {
                 let random_point = rect_random!(self rng $a0 $a1 $b0 $b1 $idx0 $idx1 $idx2);
-                random_point - origin
+                UnitVector3::new_normalize(random_point - origin)
             }
         }
     };

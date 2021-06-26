@@ -308,6 +308,9 @@ where
         );
         // Boxes
         scene.add_all(
+            ,
+            ,
+            ,
             Cuboid::new(Vector3::new(130., 0., 65.), Vector3::new(295., 165., 230.))
                 .into_iter()
                 .map(|x| {
@@ -322,6 +325,9 @@ where
             white.clone(),
         );
         scene.add_all(
+            ,
+            ,
+            ,
             Cuboid::new(Vector3::new(265., 0., 295.), Vector3::new(430., 330., 460.)).into_iter(),
             white,
         );

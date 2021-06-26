@@ -1,6 +1,5 @@
 use crate::bvh::aabb::AABB;
 use crate::hittable::{Bounded, HitRecord, Hittable};
-use crate::hittables::hittable_list::HittableList;
 use crate::random::random_uniform;
 use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field, EPSILON};
@@ -10,12 +9,12 @@ use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct ConstantMedium<O> {
-    hittable: HittableList<O>,
+    hittable: O,
     neg_inv_density: f32,
 }
 
 impl<O> ConstantMedium<O> {
-    pub fn new(hittable: HittableList<O>, density: f32) -> Self {
+    pub fn new(hittable: O, density: f32) -> Self {
         ConstantMedium {
             hittable,
             neg_inv_density: -1.0 / density,

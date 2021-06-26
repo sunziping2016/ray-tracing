@@ -190,8 +190,8 @@ pub trait Samplable<F: SimdRealField, R: Rng> {
     ) -> F {
         F::zero()
     }
-    fn generate(&self, _origin: &Point3<F>, _rng: &mut R) -> Vector3<F> {
-        Vector3::new(F::one(), F::zero(), F::zero())
+    fn generate(&self, _origin: &Point3<F>, _rng: &mut R) -> UnitVector3<F> {
+        UnitVector3::new_unchecked(Vector3::new(F::one(), F::zero(), F::zero()))
     }
 }
 
@@ -227,7 +227,7 @@ where
         Python::with_gil(|py| self.borrow(py).value(origin, direction, mask, rng))
     }
 
-    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> UnitVector3<F> {
         Python::with_gil(|py| self.borrow(py).generate(origin, rng))
     }
 }

@@ -131,15 +131,17 @@ where
         )
     }
 
-    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> UnitVector3<F> {
         let x = random_uniform::<F, _, _>(EPSILON..(1f32 - EPSILON), rng);
         let y = random_uniform::<F, _, _>(EPSILON..(1f32 - EPSILON), rng);
         let mask = (x + y).simd_gt(F::one());
         let x = mask.if_else(|| F::one() - F::splat(EPSILON) - x, || x);
         let y = mask.if_else(|| F::one() - F::splat(EPSILON) - y, || y);
-        Point3::splat(self.vertices[0])
-            + Vector3::splat(self.edge12).scale(x)
-            + Vector3::splat(self.edge13).scale(y)
-            - origin
+        UnitVector3::new_normalize(
+            Point3::splat(self.vertices[0])
+                + Vector3::splat(self.edge12).scale(x)
+                + Vector3::splat(self.edge13).scale(y)
+                - origin,
+        )
     }
 }

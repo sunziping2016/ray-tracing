@@ -115,11 +115,11 @@ where
             .value(&origin, &UnitVector3::new_normalize(direction), mask, rng)
     }
 
-    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> UnitVector3<F> {
         let transform = Matrix3::<F>::splat(self.transform);
         let inv_transform = Matrix3::<F>::splat(self.inv_transform);
         let inv_translation = Vector3::<F>::splat(self.inv_translation);
         let origin = inv_transform * origin + inv_translation;
-        transform * self.object.generate(&origin, rng)
+        UnitVector3::new_normalize(transform * self.object.generate(&origin, rng).as_ref())
     }
 }

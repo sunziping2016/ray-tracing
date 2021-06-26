@@ -1,38 +1,31 @@
+use crate::hittable::Samplable;
 use crate::pdf::Pdf;
-use crate::BoxedSamplable;
 use nalgebra::{Point3, SimdRealField, SimdValue, UnitVector3};
 use rand::Rng;
 
 #[derive(Clone)]
-pub struct HittablesPdf<'a, F, R> {
+pub struct HittablePdf<'a, F, O> {
     origin: Point3<F>,
-    objects: &'a Vec<BoxedSamplable<F, R>>,
+    object: &'a O,
 }
 
-impl<'a, F, R> HittablesPdf<'a, F, R> {
-    pub fn new(origin: Point3<F>, objects: &'a Vec<BoxedSamplable<F, R>>) -> Self {
-        HittablesPdf { origin, objects }
+impl<'a, F, O> HittablePdf<'a, F, O> {
+    pub fn new(origin: Point3<F>, object: &'a O) -> Self {
+        HittablePdf { origin, object }
     }
 }
 
-impl<'a, F, R: Rng> Pdf<F, R> for HittablesPdf<'a, F, R>
+impl<'a, F, R: Rng, O> Pdf<F, R> for HittablePdf<'a, F, O>
 where
+    O: Samplable<F, R>,
     F: SimdRealField<Element = f32>,
     F::SimdBool: SimdValue<Element = bool>,
 {
-    fn value(&self, direction: &UnitVector3<F>, rng: &mut R) -> F {
-        let weight = 1f32 / self.objects.len() as f32;
-        let mut sum = F::zero();
-        for object in self.objects.iter() {
-            sum += F::splat(weight)
-                * object.value(&self.origin, direction, F::SimdBool::splat(true), rng);
-        }
-        sum
+    fn value(&self, direction: &UnitVector3<F>, mask: F::SimdBool, rng: &mut R) -> F {
+        self.object.value(&self.origin, direction, mask, rng)
     }
 
     fn generate(&self, rng: &mut R) -> UnitVector3<F> {
-        // FIXME: batch random?
-        let index = rng.gen_range(0..self.objects.len());
-        UnitVector3::new_normalize(self.objects[index].generate(&self.origin, rng))
+        self.object.generate(&self.origin, rng)
     }
 }

@@ -5,6 +5,7 @@
 #![feature(never_type)]
 #![feature(associated_type_defaults)]
 #![feature(array_map)]
+#![feature(min_type_alias_impl_trait)]
 
 use crate::hittable::{Hittable, Samplable};
 use crate::material::Material;

@@ -120,7 +120,7 @@ where
             F::zero,
         )
     }
-    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> UnitVector3<F> {
         let direction = Point3::splat(self.center) - origin;
         let selector = direction.normalize()[0].simd_abs().simd_gt(F::splat(0.9));
         let up = Vector3::new(
@@ -129,7 +129,9 @@ where
             F::zero(),
         );
         let rot = Rotation3::face_towards(&direction, &up);
-        rot * random_to_sphere(rng, F::splat(self.radius), direction.norm_squared())
+        UnitVector3::new_normalize(
+            rot * random_to_sphere(rng, F::splat(self.radius), direction.norm_squared()),
+        )
     }
 }
 

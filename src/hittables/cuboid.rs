@@ -1,4 +1,5 @@
 use crate::hittable::aa_rect::{XYRect, YZRect, ZXRect};
+use crate::hittables::ManyHittables;
 use crate::{BoxedHittable, SimdBoolField, SimdF32Field};
 use nalgebra::Vector3;
 use rand::Rng;
@@ -15,7 +16,17 @@ impl Cuboid {
     pub fn new(p0: Vector3<f32>, p1: Vector3<f32>) -> Self {
         Cuboid { p0, p1 }
     }
-    pub fn into_iter<F, R: Rng>(self) -> impl Iterator<Item = BoxedHittable<F, R>>
+}
+
+impl<F, R: Rng> ManyHittables<F, R> for Cuboid
+where
+    F: SimdF32Field,
+    F::SimdBool: SimdBoolField<F>,
+{
+    type Item = BoxedHittable<F, R>;
+    type Iter = IntoIter<Self::Item, 6>;
+
+    fn into_hittables(self) -> Self::Iter
     where
         F: SimdF32Field,
         F::SimdBool: SimdBoolField<F>,

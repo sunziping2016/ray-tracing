@@ -1,5 +1,6 @@
 use crate::bvh::bvh::BVH;
 use crate::hittable::py::to_hittable;
+use crate::hittables::group::HittableGroup;
 use crate::material::py::to_material;
 use crate::py::{PyRng, PySimd, PyVector3};
 use crate::{BoxedHittable, BoxedMaterial, BoxedSamplable};
@@ -13,7 +14,7 @@ use rand::Rng;
 pub struct Scene<F, R: Rng> {
     hittables: Vec<BoxedHittable<F, R>>,
     materials: Vec<BoxedMaterial<F, R>>,
-    lights: Vec<BoxedSamplable<F, R>>,
+    lights: HittableGroup<BoxedSamplable<F, R>>,
     background: Vector3<f32>,
     environment: Vector3<f32>,
 }
@@ -23,7 +24,7 @@ impl<F, R: Rng> Scene<F, R> {
         Self {
             hittables: Vec::new(),
             materials: Vec::new(),
-            lights: Vec::new(),
+            lights: HittableGroup::new(),
             background,
             environment,
         }
@@ -49,7 +50,7 @@ impl<F, R: Rng> Scene<F, R> {
         material: BoxedMaterial<F, R>,
     ) {
         self.hittables.push(hittable);
-        self.lights.push(samplable);
+        self.lights.add(samplable);
         self.materials.push(material);
     }
     pub fn build_bvh(&self, time0: f32, time1: f32) -> BVH {
@@ -79,7 +80,7 @@ impl<F, R: Rng> Scene<F, R> {
     pub fn environment(&self) -> Vector3<f32> {
         self.environment
     }
-    pub fn lights(&self) -> &Vec<BoxedSamplable<F, R>> {
+    pub fn lights(&self) -> &HittableGroup<BoxedSamplable<F, R>> {
         &self.lights
     }
 }

@@ -13,8 +13,9 @@ use std::time::{Duration, SystemTime};
 use v4ray::camera::CameraParam;
 use v4ray::hittable::aa_rect::{XYRect, YZRect, ZXRect};
 use v4ray::hittable::sphere::Sphere;
-use v4ray::hittable::transform::TransformHittable;
 use v4ray::hittables::cuboid::Cuboid;
+use v4ray::hittables::transform::TransformHittables;
+use v4ray::hittables::ManyHittables;
 use v4ray::material::dielectric::Dielectric;
 use v4ray::material::diffuse_light::DiffuseLight;
 use v4ray::material::lambertian::Lambertian;
@@ -68,20 +69,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     // Boxes
     scene.add_all(
-        Cuboid::new(Vector3::new(0., 0., 0.), Vector3::new(165., 330., 165.))
-            .into_iter()
-            .map(|x| {
-                Arc::new(TransformHittable::new(
-                    convert(
-                        Translation3::new(265., 0., 295.)
-                            * Rotation3::from_axis_angle(
-                                &UnitVector3::new_unchecked(Vector3::y()),
-                                15f32.to_radians(),
-                            ),
+        TransformHittables::new(
+            convert(
+                Translation3::new(265., 0., 295.)
+                    * Rotation3::from_axis_angle(
+                        &UnitVector3::new_unchecked(Vector3::y()),
+                        15f32.to_radians(),
                     ),
-                    x,
-                )) as BoxedHittable<F, R>
-            }),
+            ),
+            Cuboid::new(Vector3::new(0., 0., 0.), Vector3::new(165., 330., 165.)),
+        )
+        .into_hittables()
+        .map(|x| Arc::new(x) as BoxedHittable<F, R>),
         white.clone(),
     );
     scene.add(

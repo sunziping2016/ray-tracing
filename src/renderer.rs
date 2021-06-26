@@ -2,7 +2,7 @@ use crate::bvh::bvh::BVH;
 use crate::camera::{Camera, CameraParam};
 use crate::hittable::HitRecord;
 use crate::material::ScatterRecord;
-use crate::pdf::hittables::HittablesPdf;
+use crate::pdf::hittables::HittablePdf;
 use crate::pdf::mixture::MixturePdf;
 use crate::pdf::Pdf;
 use crate::py::{PyRng, PySimd};
@@ -221,12 +221,12 @@ where
                             ScatterRecord::Scatter { attenuation, pdf } => {
                                 if !self.scene.lights().is_empty() {
                                     let mixed_pdf = MixturePdf::new(
-                                        HittablesPdf::new(hit_record.p, self.scene.lights()),
+                                        HittablePdf::new(hit_record.p, self.scene.lights()),
                                         pdf.clone(),
                                     );
                                     let direction = mixed_pdf.generate(rng);
-                                    let coef = attenuation * pdf.value(&direction, rng)
-                                        / mixed_pdf.value(&direction, rng);
+                                    let coef = attenuation * pdf.value(&direction, ray.mask(), rng)
+                                        / mixed_pdf.value(&direction, ray.mask(), rng);
                                     let ray =
                                         Ray::new(hit_record.p, direction, *ray.time(), ray.mask());
                                     (ray, coef)
