@@ -24,7 +24,7 @@ impl<O> HittableList<O> {
             .reduce(|x, y| x.join(&y))
             .unwrap()
     }
-    pub fn hit<F, R: Rng>(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F>
+    pub fn hit<F, R: Rng>(&self, ray: &Ray<F>, t_min: F, t_max: F, rng: &mut R) -> HitRecord<F>
     where
         O: Hittable<F, R>,
         F: SimdF32Field,
@@ -33,7 +33,7 @@ impl<O> HittableList<O> {
         let mut hit_record = HitRecord::default();
         let mut closest_so_far = t_max;
         for o in self.objects.iter() {
-            let new_hr = o.hit(ray, t_min, closest_so_far);
+            let new_hr = o.hit(ray, t_min, closest_so_far, rng);
             closest_so_far = new_hr.mask.if_else(|| new_hr.t, || closest_so_far);
             hit_record = new_hr.mask.if_else(|| new_hr, || hit_record)
         }

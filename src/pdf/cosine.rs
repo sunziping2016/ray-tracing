@@ -29,7 +29,7 @@ impl<F, R: Rng> Pdf<F, R> for CosinePdf<F>
 where
     F: SimdF32Field,
 {
-    fn value(&self, direction: &UnitVector3<F>) -> F {
+    fn value(&self, direction: &UnitVector3<F>, _rng: &mut R) -> F {
         let cosine = direction.as_ref().dot(&self.dir);
         cosine
             .is_simd_positive()

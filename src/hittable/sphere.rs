@@ -1,6 +1,6 @@
 use crate::bvh::aabb::AABB;
 use crate::hittable::py::PyHitRecord;
-use crate::hittable::{Bounded, HitRecord, Hittable};
+use crate::hittable::{Bounded, HitRecord, Hittable, Samplable};
 use crate::py::{numpy_to_f, PyRng, PySimd, PyVector3};
 use crate::random::random_to_sphere;
 use crate::ray::{PyRay, Ray};
@@ -11,7 +11,7 @@ use nalgebra::{
 use numpy::PyArray1;
 use pyo3::proc_macro::{pyclass, pymethods};
 use pyo3::PyResult;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 
 #[pyclass(name = "Sphere")]
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ where
     F::SimdBool: SimdBoolField<F>,
 {
     #[allow(clippy::many_single_char_names)]
-    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
+    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F, _rng: &mut R) -> HitRecord<F> {
         let center = Point3::splat(self.center);
         let oc: Vector3<F> = ray.origin() - center;
         let half_b = oc.dot(ray.direction());
@@ -81,12 +81,26 @@ where
             mask,
         }
     }
-    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+}
+
+impl<F, R: Rng> Samplable<F, R> for Sphere
+where
+    F: SimdF32Field,
+    F::SimdBool: SimdBoolField<F>,
+{
+    fn value(
+        &self,
+        origin: &Point3<F>,
+        direction: &UnitVector3<F>,
+        mask: F::SimdBool,
+        rng: &mut R,
+    ) -> F {
         let mask = Hittable::<F, R>::hit(
             &self,
             &Ray::new(*origin, *direction, F::zero(), mask),
             F::splat(EPSILON),
             F::splat(f32::INFINITY),
+            rng,
         )
         .mask;
         if mask.none() {
@@ -106,7 +120,7 @@ where
             F::zero,
         )
     }
-    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
         let direction = Point3::splat(self.center) - origin;
         let selector = direction.normalize()[0].simd_abs().simd_gt(F::splat(0.9));
         let up = Vector3::new(
@@ -147,7 +161,8 @@ impl Sphere {
         let ray = Ray::<PySimd>::from(ray);
         let t_min = numpy_to_f(t_min)?;
         let t_max = numpy_to_f(t_max)?;
-        let hit_record = Hittable::<PySimd, PyRng>::hit(self, &ray, t_min, t_max);
+        let hit_record =
+            Hittable::<PySimd, PyRng>::hit(self, &ray, t_min, t_max, &mut thread_rng());
         Ok(PyHitRecord::from(&hit_record))
     }
 }

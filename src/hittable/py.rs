@@ -4,7 +4,7 @@ use crate::hittable::{Bounded, HitRecord, Hittable};
 use crate::py::{bits_to_m, f_to_numpy, PyBoxedHittable, PyRng, PySimd};
 use crate::ray::{PyRay, Ray};
 use crate::simd::MySimdVector;
-use nalgebra::{Point3, SimdBool, SimdValue, UnitVector3, Vector2, Vector3};
+use nalgebra::{Point3, SimdBool, UnitVector3, Vector2, Vector3};
 use pyo3::proc_macro::pyclass;
 use pyo3::types::PyModule;
 use pyo3::{Py, PyAny, PyObject, PyResult, Python};
@@ -34,7 +34,13 @@ impl Bounded for PyHittable {
 }
 
 impl Hittable<PySimd, PyRng> for PyHittable {
-    fn hit(&self, ray: &Ray<PySimd>, t_min: PySimd, t_max: PySimd) -> HitRecord<PySimd> {
+    fn hit(
+        &self,
+        ray: &Ray<PySimd>,
+        t_min: PySimd,
+        t_max: PySimd,
+        _rng: &mut PyRng,
+    ) -> HitRecord<PySimd> {
         Python::with_gil(|py| {
             let inner = self.inner.as_ref(py);
             (&inner
@@ -51,19 +57,6 @@ impl Hittable<PySimd, PyRng> for PyHittable {
                 .unwrap())
                 .into()
         })
-    }
-
-    fn pdf_value(
-        &self,
-        _origin: &Point3<PySimd>,
-        _direction: &UnitVector3<PySimd>,
-        _mask: <PySimd as SimdValue>::SimdBool,
-    ) -> PySimd {
-        todo!()
-    }
-
-    fn random(&self, _rng: &mut PyRng, _origin: &Point3<PySimd>) -> Vector3<PySimd> {
-        todo!()
     }
 }
 

@@ -52,10 +52,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         green,
     );
     scene.add(Arc::new(YZRect::new(0., 555., 0., 555., 0., true)), red);
-    scene.add_light(
-        Arc::new(ZXRect::new(213., 343., 227., 332., 554., false)),
-        light,
-    );
+    let light_hittable = Arc::new(ZXRect::new(213., 343., 227., 332., 554., false));
+    scene.add_important(light_hittable.clone(), light_hittable, light);
     scene.add(
         Arc::new(ZXRect::new(0., 555., 0., 555., 0., true)),
         white.clone(),

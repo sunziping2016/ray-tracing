@@ -19,9 +19,9 @@ impl<F, R: Rng, P1: Pdf<F, R>, P2: Pdf<F, R>> Pdf<F, R> for MixturePdf<P1, P2>
 where
     F: SimdRealField<Element = f32>,
 {
-    fn value(&self, direction: &UnitVector3<F>) -> F {
-        F::splat(0.5f32) * self.pdf1.value(direction)
-            + F::splat(0.5f32) * self.pdf2.value(direction)
+    fn value(&self, direction: &UnitVector3<F>, rng: &mut R) -> F {
+        F::splat(0.5f32) * self.pdf1.value(direction, rng)
+            + F::splat(0.5f32) * self.pdf2.value(direction, rng)
     }
 
     fn generate(&self, rng: &mut R) -> UnitVector3<F> {

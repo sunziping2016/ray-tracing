@@ -1,5 +1,5 @@
 use crate::bvh::aabb::AABB;
-use crate::hittable::{Bounded, HitRecord, Hittable};
+use crate::hittable::{Bounded, HitRecord, Hittable, Samplable};
 use crate::ray::Ray;
 use crate::SimdF32Field;
 use nalgebra::{Matrix3, Point3, Projective3, SimdValue, UnitVector3, Vector3};
@@ -61,7 +61,7 @@ where
     O: Hittable<F, R>,
     F: SimdF32Field,
 {
-    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
+    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F, rng: &mut R) -> HitRecord<F> {
         let transform = Matrix3::<F>::splat(self.transform);
         let translation = Vector3::<F>::splat(self.translation);
         let inv_transform = Matrix3::<F>::splat(self.inv_transform);
@@ -81,7 +81,7 @@ where
             uv,
             front_face,
             mask,
-        } = self.object.hit(&ray, t_min * norm, t_max * norm);
+        } = self.object.hit(&ray, t_min * norm, t_max * norm, rng);
         let p = transform * p + translation;
         let normal = transform * normal.as_ref();
         HitRecord {
@@ -93,21 +93,33 @@ where
             mask,
         }
     }
+}
 
-    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+impl<O, F, R: Rng> Samplable<F, R> for TransformHittable<O>
+where
+    O: Samplable<F, R>,
+    F: SimdF32Field,
+{
+    fn value(
+        &self,
+        origin: &Point3<F>,
+        direction: &UnitVector3<F>,
+        mask: F::SimdBool,
+        rng: &mut R,
+    ) -> F {
         let inv_transform = Matrix3::<F>::splat(self.inv_transform);
         let inv_translation = Vector3::<F>::splat(self.inv_translation);
         let origin = inv_transform * origin + inv_translation;
         let direction = inv_transform * direction.as_ref();
         self.object
-            .pdf_value(&origin, &UnitVector3::new_normalize(direction), mask)
+            .value(&origin, &UnitVector3::new_normalize(direction), mask, rng)
     }
 
-    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
         let transform = Matrix3::<F>::splat(self.transform);
         let inv_transform = Matrix3::<F>::splat(self.inv_transform);
         let inv_translation = Vector3::<F>::splat(self.inv_translation);
         let origin = inv_transform * origin + inv_translation;
-        transform * self.object.random(rng, &origin)
+        transform * self.object.generate(&origin, rng)
     }
 }

@@ -283,8 +283,10 @@ where
                 0.65, 0.05, 0.05,
             )))),
         );
-        scene.add_light(
-            Arc::new(ZXRect::new(227., 332., 213., 343., 554., false)),
+        let light_hittable = Arc::new(ZXRect::new(227., 332., 213., 343., 554., false));
+        scene.add_important(
+            light_hittable.clone(),
+            light_hittable,
             Arc::new(DiffuseLight::new(SolidColor::new(Vector3::new(
                 15., 15., 15.,
             )))),

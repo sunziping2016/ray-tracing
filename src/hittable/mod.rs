@@ -175,12 +175,22 @@ pub trait Bounded {
 }
 
 #[auto_impl(&, &mut, Box, Rc, Arc)]
-pub trait Hittable<F: SimdRealField, R: Rng>: Bounded {
-    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F>;
-    fn pdf_value(&self, _origin: &Point3<F>, _direction: &UnitVector3<F>, _mask: F::SimdBool) -> F {
+pub trait Hittable<F: SimdValue, R: Rng>: Bounded {
+    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F, rng: &mut R) -> HitRecord<F>;
+}
+
+#[auto_impl(&, &mut, Box, Rc, Arc)]
+pub trait Samplable<F: SimdRealField, R: Rng> {
+    fn value(
+        &self,
+        _origin: &Point3<F>,
+        _direction: &UnitVector3<F>,
+        _mask: F::SimdBool,
+        _rng: &mut R,
+    ) -> F {
         F::zero()
     }
-    fn random(&self, _rng: &mut R, _origin: &Point3<F>) -> Vector3<F> {
+    fn generate(&self, _origin: &Point3<F>, _rng: &mut R) -> Vector3<F> {
         Vector3::new(F::one(), F::zero(), F::zero())
     }
 }
@@ -198,15 +208,26 @@ impl<T, F: SimdRealField, R: Rng> Hittable<F, R> for Py<T>
 where
     T: Hittable<F, R> + PyClass,
 {
-    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
-        Python::with_gil(|py| self.borrow(py).hit(ray, t_min, t_max))
+    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F, rng: &mut R) -> HitRecord<F> {
+        Python::with_gil(|py| self.borrow(py).hit(ray, t_min, t_max, rng))
+    }
+}
+
+impl<T, F: SimdRealField, R: Rng> Samplable<F, R> for Py<T>
+where
+    T: Samplable<F, R> + PyClass,
+{
+    fn value(
+        &self,
+        origin: &Point3<F>,
+        direction: &UnitVector3<F>,
+        mask: F::SimdBool,
+        rng: &mut R,
+    ) -> F {
+        Python::with_gil(|py| self.borrow(py).value(origin, direction, mask, rng))
     }
 
-    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
-        Python::with_gil(|py| self.borrow(py).pdf_value(origin, direction, mask))
-    }
-
-    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
-        Python::with_gil(|py| self.borrow(py).random(rng, origin))
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
+        Python::with_gil(|py| self.borrow(py).generate(origin, rng))
     }
 }

@@ -6,7 +6,7 @@ use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field, EPSILON};
 use nalgebra::{SimdBool, SimdValue, UnitVector3, Vector3};
 use num_traits::Zero;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct ConstantMedium<O> {
@@ -38,10 +38,13 @@ where
     F: SimdF32Field,
     F::SimdBool: SimdBoolField<F>,
 {
-    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
-        let hit_record1 =
-            self.hittable
-                .hit(ray, F::splat(f32::NEG_INFINITY), F::splat(f32::INFINITY));
+    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F, rng: &mut R) -> HitRecord<F> {
+        let hit_record1 = self.hittable.hit(
+            ray,
+            F::splat(f32::NEG_INFINITY),
+            F::splat(f32::INFINITY),
+            rng,
+        );
         let mask = ray.mask() & hit_record1.mask;
         if mask.none() {
             return HitRecord::default();
@@ -50,6 +53,7 @@ where
             ray,
             hit_record1.t + F::splat(EPSILON),
             F::splat(f32::INFINITY),
+            rng,
         );
         let mask = mask & hit_record2.mask;
         if mask.none() {
@@ -63,8 +67,8 @@ where
         }
         let t_min = t_min.simd_max(F::zero());
         let distance_inside_boundary = t_max - t_min;
-        let hit_distance = F::splat(self.neg_inv_density)
-            * random_uniform::<F, _, _>(0f32..=1f32, &mut thread_rng()).simd_ln();
+        let hit_distance =
+            F::splat(self.neg_inv_density) * random_uniform::<F, _, _>(0f32..=1f32, rng).simd_ln();
         let mask = mask & hit_distance.simd_le(distance_inside_boundary);
         if mask.none() {
             return HitRecord::default();

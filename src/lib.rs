@@ -6,7 +6,7 @@
 #![feature(associated_type_defaults)]
 #![feature(array_map)]
 
-use crate::hittable::Hittable;
+use crate::hittable::{Hittable, Samplable};
 use crate::material::Material;
 use crate::simd::MySimdVector;
 use crate::texture::Texture;
@@ -31,6 +31,7 @@ pub mod texture;
 pub const EPSILON: f32 = 0.001;
 
 pub type BoxedHittable<F, R> = Arc<dyn Hittable<F, R> + Send + Sync>;
+pub type BoxedSamplable<F, R> = Arc<dyn Samplable<F, R> + Send + Sync>;
 pub type BoxedMaterial<F, R> = Arc<dyn Material<F, R> + Send + Sync>;
 pub type BoxedTexture<F> = Arc<dyn Texture<F> + Send + Sync>;
 

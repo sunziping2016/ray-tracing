@@ -2,7 +2,7 @@ use crate::bvh::bvh::BVH;
 use crate::hittable::py::to_hittable;
 use crate::material::py::to_material;
 use crate::py::{PyRng, PySimd, PyVector3};
-use crate::{BoxedHittable, BoxedMaterial};
+use crate::{BoxedHittable, BoxedMaterial, BoxedSamplable};
 use nalgebra::Vector3;
 use num_traits::Zero;
 use pyo3::proc_macro::{pyclass, pymethods};
@@ -13,7 +13,7 @@ use rand::Rng;
 pub struct Scene<F, R: Rng> {
     hittables: Vec<BoxedHittable<F, R>>,
     materials: Vec<BoxedMaterial<F, R>>,
-    lights: Vec<BoxedHittable<F, R>>,
+    lights: Vec<BoxedSamplable<F, R>>,
     background: Vector3<f32>,
     environment: Vector3<f32>,
 }
@@ -42,9 +42,14 @@ impl<F, R: Rng> Scene<F, R> {
             self.materials.push(material.clone());
         });
     }
-    pub fn add_light(&mut self, hittable: BoxedHittable<F, R>, material: BoxedMaterial<F, R>) {
-        self.hittables.push(hittable.clone());
-        self.lights.push(hittable);
+    pub fn add_important(
+        &mut self,
+        hittable: BoxedHittable<F, R>,
+        samplable: BoxedSamplable<F, R>,
+        material: BoxedMaterial<F, R>,
+    ) {
+        self.hittables.push(hittable);
+        self.lights.push(samplable);
         self.materials.push(material);
     }
     pub fn build_bvh(&self, time0: f32, time1: f32) -> BVH {
@@ -74,7 +79,7 @@ impl<F, R: Rng> Scene<F, R> {
     pub fn environment(&self) -> Vector3<f32> {
         self.environment
     }
-    pub fn lights(&self) -> &Vec<BoxedHittable<F, R>> {
+    pub fn lights(&self) -> &Vec<BoxedSamplable<F, R>> {
         &self.lights
     }
 }

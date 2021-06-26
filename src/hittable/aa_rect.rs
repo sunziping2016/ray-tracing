@@ -1,5 +1,5 @@
 use crate::bvh::aabb::AABB;
-use crate::hittable::{Bounded, HitRecord, Hittable};
+use crate::hittable::{Bounded, HitRecord, Hittable, Samplable};
 use crate::random::random_uniform;
 use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field, EPSILON};
@@ -111,7 +111,7 @@ macro_rules! rect_shape {
             F: SimdF32Field,
             F::SimdBool: SimdBoolField<F>,
         {
-            fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
+            fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F, _rng: &mut R) -> HitRecord<F> {
                 let t = (F::splat(self.k) - ray.origin()[$idx2]) / ray.direction()[$idx2];
                 let mask = ray.mask() & t.simd_ge(t_min) & t.simd_le(t_max);
                 if mask.none() {
@@ -142,18 +142,25 @@ macro_rules! rect_shape {
                     mask,
                 }
             }
-
-            fn pdf_value(
+        }
+        impl<F, R: Rng> Samplable<F, R> for $ty
+        where
+            F: SimdF32Field,
+            F::SimdBool: SimdBoolField<F>,
+        {
+            fn value(
                 &self,
                 origin: &Point3<F>,
                 direction: &UnitVector3<F>,
                 mask: <F as SimdValue>::SimdBool,
+                rng: &mut R,
             ) -> F {
                 let hit_record = Hittable::<F, R>::hit(
                     &self,
                     &Ray::new(*origin, *direction, F::zero(), mask),
                     F::splat(EPSILON),
                     F::splat(f32::INFINITY),
+                    rng,
                 );
                 if hit_record.mask.none() {
                     return F::zero();
@@ -172,7 +179,7 @@ macro_rules! rect_shape {
                 )
             }
 
-            fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
+            fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
                 let random_point = rect_random!(self rng $a0 $a1 $b0 $b1 $idx0 $idx1 $idx2);
                 random_point - origin
             }

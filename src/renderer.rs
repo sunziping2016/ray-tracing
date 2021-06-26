@@ -152,7 +152,7 @@ where
                     .for_each(|index1| {
                         let ray = Ray::<F>::from(&rays[index1..(index1 + F::LANES)]);
                         let hit_record =
-                            shape.hit(&ray, F::splat(EPSILON), F::splat(f32::INFINITY));
+                            shape.hit(&ray, F::splat(EPSILON), F::splat(f32::INFINITY), rng);
                         (0..F::LANES)
                             .take_while(|index2| unsafe { ray.mask().extract_unchecked(*index2) })
                             .filter(|index2| unsafe { hit_record.mask.extract_unchecked(*index2) })
@@ -225,8 +225,8 @@ where
                                         pdf.clone(),
                                     );
                                     let direction = mixed_pdf.generate(rng);
-                                    let coef = attenuation * pdf.value(&direction)
-                                        / mixed_pdf.value(&direction);
+                                    let coef = attenuation * pdf.value(&direction, rng)
+                                        / mixed_pdf.value(&direction, rng);
                                     let ray =
                                         Ray::new(hit_record.p, direction, *ray.time(), ray.mask());
                                     (ray, coef)

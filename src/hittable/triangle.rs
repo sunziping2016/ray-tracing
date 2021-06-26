@@ -1,5 +1,5 @@
 use crate::bvh::aabb::AABB;
-use crate::hittable::{Bounded, HitRecord, Hittable};
+use crate::hittable::{Bounded, HitRecord, Hittable, Samplable};
 use crate::random::random_uniform;
 use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field, EPSILON};
@@ -53,7 +53,7 @@ where
     F: SimdF32Field,
     F::SimdBool: SimdBoolField<F>,
 {
-    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F) -> HitRecord<F> {
+    fn hit(&self, ray: &Ray<F>, t_min: F, t_max: F, _rng: &mut R) -> HitRecord<F> {
         let p_vec = ray.direction().cross(&Vector3::splat(self.edge13));
         let det = Vector3::splat(self.edge12).dot(&p_vec);
         let mask = ray.mask() & det.simd_abs().is_simd_positive();
@@ -93,13 +93,26 @@ where
             mask,
         }
     }
+}
 
-    fn pdf_value(&self, origin: &Point3<F>, direction: &UnitVector3<F>, mask: F::SimdBool) -> F {
+impl<F, R: Rng> Samplable<F, R> for Triangle
+where
+    F: SimdF32Field,
+    F::SimdBool: SimdBoolField<F>,
+{
+    fn value(
+        &self,
+        origin: &Point3<F>,
+        direction: &UnitVector3<F>,
+        mask: F::SimdBool,
+        rng: &mut R,
+    ) -> F {
         let hit_record = Hittable::<F, R>::hit(
             &self,
             &Ray::new(*origin, *direction, F::zero(), mask),
             F::splat(EPSILON),
             F::splat(f32::INFINITY),
+            rng,
         );
         if hit_record.mask.none() {
             return F::zero();
@@ -118,7 +131,7 @@ where
         )
     }
 
-    fn random(&self, rng: &mut R, origin: &Point3<F>) -> Vector3<F> {
+    fn generate(&self, origin: &Point3<F>, rng: &mut R) -> Vector3<F> {
         let x = random_uniform::<F, _, _>(EPSILON..(1f32 - EPSILON), rng);
         let y = random_uniform::<F, _, _>(EPSILON..(1f32 - EPSILON), rng);
         let mask = (x + y).simd_gt(F::one());
