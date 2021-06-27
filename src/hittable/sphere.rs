@@ -1,19 +1,28 @@
 use crate::bvh::aabb::AABB;
+#[cfg(feature = "python")]
 use crate::hittable::py::PyHitRecord;
 use crate::hittable::{Bounded, HitRecord, Hittable, Samplable};
+#[cfg(feature = "python")]
 use crate::py::{numpy_to_f, PyRng, PySimd, PyVector3};
 use crate::random::random_to_sphere;
-use crate::ray::{PyRay, Ray};
+#[cfg(feature = "python")]
+use crate::ray::PyRay;
+use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field, EPSILON};
 use nalgebra::{
     Point3, Rotation3, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3,
 };
+#[cfg(feature = "python")]
 use numpy::PyArray1;
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
+#[cfg(feature = "python")]
 use pyo3::PyResult;
-use rand::{thread_rng, Rng};
+#[cfg(feature = "python")]
+use rand::thread_rng;
+use rand::Rng;
 
-#[pyclass(name = "Sphere")]
+#[cfg_attr(feature = "python", pyclass(name = "Sphere"))]
 #[derive(Debug, Clone)]
 pub struct Sphere {
     center: Point3<f32>,
@@ -135,6 +144,7 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl Sphere {
     #[new]

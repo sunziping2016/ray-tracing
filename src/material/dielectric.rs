@@ -4,10 +4,11 @@ use crate::random::random_uniform;
 use crate::ray::Ray;
 use crate::SimdF32Field;
 use nalgebra::{SimdBool, SimdRealField, UnitVector3, Vector3};
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
 use rand::Rng;
 
-#[pyclass(name = "Dielectric")]
+#[cfg_attr(feature = "python", pyclass(name = "Dielectric"))]
 #[derive(Debug, Clone)]
 pub struct Dielectric {
     ir: f32,
@@ -59,6 +60,7 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl Dielectric {
     #[new]

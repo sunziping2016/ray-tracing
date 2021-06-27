@@ -1,12 +1,18 @@
 use crate::bvh::bvh::BVH;
+#[cfg(feature = "python")]
 use crate::hittable::py::to_hittable;
 use crate::hittables::group::HittableGroup;
+#[cfg(feature = "python")]
 use crate::material::py::to_material;
+#[cfg(feature = "python")]
 use crate::py::{PyRng, PySimd, PyVector3};
 use crate::{BoxedHittable, BoxedMaterial, BoxedSamplable};
 use nalgebra::Vector3;
+#[cfg(feature = "python")]
 use num_traits::Zero;
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
+#[cfg(feature = "python")]
 use pyo3::{Py, PyAny, Python};
 use rand::Rng;
 
@@ -85,11 +91,13 @@ impl<F, R: Rng> Scene<F, R> {
     }
 }
 
+#[cfg(feature = "python")]
 #[pyclass(name = "Scene")]
 pub struct PyScene {
     pub inner: Scene<PySimd, PyRng>,
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl PyScene {
     // TODO: iterable

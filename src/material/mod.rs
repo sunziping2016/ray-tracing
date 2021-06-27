@@ -3,6 +3,7 @@ pub mod diffuse_light;
 pub mod isotropic;
 pub mod lambertian;
 pub mod metal;
+#[cfg(feature = "python")]
 pub mod py;
 
 use crate::hittable::HitRecord;
@@ -10,6 +11,7 @@ use crate::pdf::Pdf;
 use crate::ray::Ray;
 use auto_impl::auto_impl;
 use nalgebra::{SimdValue, UnitVector3, Vector3};
+#[cfg(feature = "python")]
 use pyo3::{Py, PyClass, Python};
 use rand::Rng;
 use simba::simd::SimdRealField;
@@ -60,6 +62,7 @@ pub fn refract<F: SimdRealField<Element = f32>>(
     UnitVector3::new_unchecked(r_out_perp + r_out_parallel)
 }
 
+#[cfg(feature = "python")]
 impl<T, F: SimdRealField, R: Rng> Material<F, R> for Py<T>
 where
     T: Material<F, R> + PyClass,

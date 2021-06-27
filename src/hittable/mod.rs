@@ -1,5 +1,6 @@
 pub mod aa_rect;
 pub mod constant_medium;
+#[cfg(feature = "python")]
 pub mod py;
 pub mod sphere;
 pub mod transform;
@@ -16,6 +17,7 @@ use nalgebra::{
     ClosedAdd, Point3, Scalar, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector2, Vector3,
 };
 use num_traits::Zero;
+#[cfg(feature = "python")]
 use pyo3::{Py, PyClass, Python};
 use rand::Rng;
 
@@ -195,6 +197,7 @@ pub trait Samplable<F: SimdRealField, R: Rng> {
     }
 }
 
+#[cfg(feature = "python")]
 impl<T> Bounded for Py<T>
 where
     T: Bounded + PyClass,
@@ -204,6 +207,7 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 impl<T, F: SimdRealField, R: Rng> Hittable<F, R> for Py<T>
 where
     T: Hittable<F, R> + PyClass,
@@ -213,6 +217,7 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 impl<T, F: SimdRealField, R: Rng> Samplable<F, R> for Py<T>
 where
     T: Samplable<F, R> + PyClass,

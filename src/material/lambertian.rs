@@ -1,13 +1,18 @@
 use crate::hittable::HitRecord;
 use crate::material::{Material, ScatterRecord};
 use crate::pdf::cosine::CosinePdf;
+#[cfg(feature = "python")]
 use crate::py::{PyBoxedTexture, PyRng, PySimd};
 use crate::ray::Ray;
+#[cfg(feature = "python")]
 use crate::texture::py::to_texture;
 use crate::texture::Texture;
 use crate::{SimdBoolField, SimdF32Field};
+#[cfg(feature = "python")]
 use nalgebra::Vector3;
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
+#[cfg(feature = "python")]
 use pyo3::{Py, PyAny, Python};
 use rand::Rng;
 use std::sync::Arc;
@@ -41,12 +46,14 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 #[pyclass(name = "Lambertian")]
 #[derive(Clone)]
 pub struct PyLambertian {
     inner: Lambertian<PyBoxedTexture>,
 }
 
+#[cfg(feature = "python")]
 impl Material<PySimd, PyRng> for PyLambertian {
     fn emitted(&self, hit_record: &HitRecord<PySimd>) -> Vector3<PySimd> {
         Material::<PySimd, PyRng>::emitted(&self.inner, hit_record)
@@ -62,6 +69,7 @@ impl Material<PySimd, PyRng> for PyLambertian {
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl PyLambertian {
     #[new]

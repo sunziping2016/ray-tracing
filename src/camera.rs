@@ -1,15 +1,17 @@
+#[cfg(feature = "python")]
 use crate::py::PyVector3;
 use crate::random::{random_in_unit_disk, random_uniform};
 use crate::ray::Ray;
 use crate::simd::MySimdVector;
 use nalgebra::{Point3, SimdValue};
 use nalgebra::{SimdRealField, Unit, Vector2, Vector3};
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::f32::consts;
 
-#[pyclass(name = "PerspectiveCameraParam")]
+#[cfg_attr(feature = "python", pyclass(name = "PerspectiveCameraParam"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CameraParam {
     pub look_from: Point3<f32>,
@@ -29,6 +31,7 @@ pub struct CameraParam {
     pub time1: Option<f32>,
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl CameraParam {
     #[new]

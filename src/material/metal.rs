@@ -1,14 +1,16 @@
 use crate::hittable::HitRecord;
 use crate::material::{reflect, Material, ScatterRecord};
+#[cfg(feature = "python")]
 use crate::py::PyVector3;
 use crate::random::random_in_unit_sphere;
 use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field};
 use nalgebra::{SimdValue, UnitVector3, Vector3};
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
 use rand::Rng;
 
-#[pyclass(name = "Metal")]
+#[cfg_attr(feature = "python", pyclass(name = "Metal"))]
 #[derive(Debug, Clone)]
 pub struct Metal {
     albedo: Vector3<f32>,
@@ -44,6 +46,7 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl Metal {
     #[new]

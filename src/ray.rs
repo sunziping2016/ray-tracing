@@ -1,5 +1,6 @@
 use crate::bvh::aabb::AABB;
 use crate::extract;
+#[cfg(feature = "python")]
 use crate::py::{bits_to_m, bits_to_numpy, PySimd};
 use crate::simd::MySimdVector;
 use arrayvec::ArrayVec;
@@ -7,8 +8,11 @@ use nalgebra::{
     ClosedAdd, Point3, Scalar, SimdBool, SimdRealField, SimdValue, UnitVector3, Vector3,
 };
 use num_traits::{One, Zero};
+#[cfg(feature = "python")]
 use numpy::{PyArray1, PyArray2};
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
+#[cfg(feature = "python")]
 use pyo3::Python;
 
 #[derive(Debug, Clone)]
@@ -185,6 +189,7 @@ impl<F: SimdValue<Element = f32>> Ray<F> {
     }
 }
 
+#[cfg(feature = "python")]
 #[pyclass(name = "Ray")]
 #[derive(Debug, Clone)]
 pub struct PyRay {
@@ -194,6 +199,7 @@ pub struct PyRay {
     mask: u64,
 }
 
+#[cfg(feature = "python")]
 impl From<&Ray<PySimd>> for PyRay {
     fn from(ray: &Ray<PySimd>) -> Self {
         let origin = [
@@ -219,6 +225,7 @@ impl From<&Ray<PySimd>> for PyRay {
     }
 }
 
+#[cfg(feature = "python")]
 impl From<&PyRay> for Ray<PySimd> {
     fn from(ray: &PyRay) -> Self {
         let origin = Point3::new(
@@ -242,6 +249,7 @@ impl From<&PyRay> for Ray<PySimd> {
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl PyRay {
     #[getter("origin")]

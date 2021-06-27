@@ -1,14 +1,17 @@
+#[cfg(feature = "python")]
 use crate::py::PyVector3;
 use nalgebra::{Point3, Vector3};
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
 
-#[pyclass(name = "AABB")]
+#[cfg_attr(feature = "python", pyclass(name = "AABB"))]
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Point3<f32>,
     pub max: Point3<f32>,
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl AABB {
     #[new]

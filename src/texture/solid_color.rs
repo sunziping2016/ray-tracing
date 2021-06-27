@@ -1,10 +1,12 @@
+#[cfg(feature = "python")]
 use crate::py::PyVector3;
 use crate::texture::Texture;
 use nalgebra::{Point3, SimdRealField, SimdValue, Vector2, Vector3};
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
 
-#[pyclass(name = "SolidColor")]
-#[text_signature = "(color, /)"]
+#[cfg_attr(feature = "python", pyclass(name = "SolidColor"))]
+#[cfg_attr(feature = "python", text_signature = "(color, /)")]
 #[derive(Clone, Debug)]
 pub struct SolidColor {
     color: Vector3<f32>,
@@ -25,6 +27,7 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl SolidColor {
     #[new]

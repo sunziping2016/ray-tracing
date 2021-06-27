@@ -5,9 +5,13 @@ use crate::material::ScatterRecord;
 use crate::pdf::hittables::HittablePdf;
 use crate::pdf::mixture::MixturePdf;
 use crate::pdf::Pdf;
+#[cfg(feature = "python")]
 use crate::py::{PyRng, PySimd};
 use crate::ray::Ray;
-use crate::scene::{PyScene, Scene};
+#[cfg(feature = "python")]
+use crate::scene::PyScene;
+use crate::scene::Scene;
+#[cfg(feature = "python")]
 use crate::simd::MySimdVector;
 use crate::{extract, EPSILON};
 use crate::{SimdBoolField, SimdF32Field};
@@ -15,20 +19,27 @@ use arrayvec::ArrayVec;
 use itertools::iproduct;
 use nalgebra::{SimdRealField, SimdValue, Vector2, Vector3};
 use num_traits::{cast, clamp};
+#[cfg(feature = "python")]
 use numpy::PyArray;
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
+#[cfg(feature = "python")]
 use pyo3::{IntoPy, PyObject, PyResult, Python};
-use rand::{thread_rng, Rng};
+#[cfg(feature = "python")]
+use rand::thread_rng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+#[cfg(feature = "python")]
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::{array, iter};
 
 fn some_true() -> Option<bool> {
     Some(true)
 }
 
-#[pyclass(name = "RendererParam")]
+#[cfg_attr(feature = "python", pyclass(name = "RendererParam"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RendererParam {
     pub width: u32,
@@ -39,6 +50,7 @@ pub struct RendererParam {
     pub antialias: Option<bool>,
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl RendererParam {
     #[new]
@@ -415,11 +427,13 @@ impl<F> RenderResult<F> {
     }
 }
 
+#[cfg(feature = "python")]
 #[pyclass(name = "Renderer")]
 pub struct PyRenderer {
     inner: Arc<Renderer<PySimd, PyRng>>,
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl PyRenderer {
     #[new]

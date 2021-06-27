@@ -1,10 +1,14 @@
+#[cfg(feature = "python")]
 use crate::py::{PyBoxedTexture, PySimd};
+#[cfg(feature = "python")]
 use crate::texture::py::to_texture;
 use crate::texture::Texture;
 use crate::SimdF32Field;
 use nalgebra::{Point3, SimdBool};
 use nalgebra::{Vector2, Vector3};
+#[cfg(feature = "python")]
 use pyo3::proc_macro::{pyclass, pymethods};
+#[cfg(feature = "python")]
 use pyo3::{Py, PyAny, Python};
 
 #[derive(Debug, Clone)]
@@ -34,18 +38,21 @@ where
     }
 }
 
+#[cfg(feature = "python")]
 #[pyclass(name = "Checker")]
 #[derive(Clone)]
 pub struct PyChecker {
     inner: Checker<PyBoxedTexture, PyBoxedTexture>,
 }
 
+#[cfg(feature = "python")]
 impl Texture<PySimd> for PyChecker {
     fn value(&self, uv: &Vector2<PySimd>, p: &Point3<PySimd>) -> Vector3<PySimd> {
         self.inner.value(uv, p)
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl PyChecker {
     #[new]

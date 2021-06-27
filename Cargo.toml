@@ -21,10 +21,10 @@ itertools = "0.10.1"
 nalgebra = { version = "0.27.1", features = ["serde-serialize"] }
 num-traits = "0.2.14"
 num_cpus = "1.13.0"
-numpy = "0.13.2"
+numpy = { version = "0.13.2", optional = true }
 packed_simd_2 = "0.3.5"
-pyo3 = { version = "0.13.2", features = ["extension-module"] }
-pyo3-asyncio = { version = "0.13.4", features = ["async-std-runtime"] }
+pyo3 = { version = "0.13.2", features = ["extension-module"], optional = true }
+pyo3-asyncio = { version = "0.13.4", features = ["async-std-runtime"], optional = true }
 rand = "0.8.3"
 rand_pcg = "0.3.1"
 rayon = "1.5.1"
@@ -40,6 +40,7 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 gtk-frontend = ["gdk", "gdk-pixbuf", "glib", "gtk"]
+python = ["numpy", "pyo3", "pyo3-asyncio"]
 
 [profile.release]
 #debug = true
