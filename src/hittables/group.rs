@@ -4,6 +4,7 @@ use crate::ray::Ray;
 use crate::{SimdBoolField, SimdF32Field};
 use nalgebra::{Point3, SimdBool, SimdValue, UnitVector3};
 use rand::Rng;
+use std::iter::FromIterator;
 
 #[derive(Debug, Clone)]
 pub struct HittableGroup<O> {
@@ -24,6 +25,14 @@ impl<O> HittableGroup<O> {
     }
     pub fn len(&self) -> usize {
         self.objects.len()
+    }
+}
+
+impl<O> FromIterator<O> for HittableGroup<O> {
+    fn from_iter<T: IntoIterator<Item = O>>(iter: T) -> Self {
+        Self {
+            objects: Vec::from_iter(iter),
+        }
     }
 }
 

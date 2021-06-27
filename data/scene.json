@@ -17,5 +17,234 @@
     ],
     "vfov": 40,
     "aperture": 0
-  }
+  },
+  "objects": [
+    {
+      "shape": {
+        "type": "mesh",
+        "file": "data/bunny.obj",
+        "transform": [
+          [1000, 0, 0],
+          [0, 1000, 0],
+          [0, 0, 1000]
+        ],
+        "translate": [
+          300,
+          0,
+          200
+        ]
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "cuboid",
+        "p0": [0, 0, 0],
+        "p1": [165, 330, 165],
+        "transform": [
+          [0.8794347, -0.2708718,  0.3914372],
+          [0.3914372,  0.8794347, -0.2708718],
+          [-0.2708718, 0.3914372,  0.8794347]
+        ],
+        "translate": [
+          265,
+          0,
+          295
+        ]
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "checker",
+          "odd": {
+            "type": "solid-color",
+            "color": [1, 0, 0]
+          },
+          "even": {
+            "type": "solid-color",
+            "color": [0, 1, 0]
+          },
+          "density": 0.1
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "triangle",
+        "vertices": [
+          [255, 0, 0],
+          [100, 20, 0],
+          [255, 20, 100]
+        ]
+      },
+      "material": {
+        "type": "metal",
+        "albedo": [0.8, 0.6, 0.2],
+        "fuzz": 0.5
+      }
+    },
+    {
+      "shape": {
+        "type": "constant-medium",
+        "density": 0.01,
+        "shape": {
+          "type": "sphere",
+          "center": [390, 90, 200],
+          "radius": 90
+        }
+      },
+      "material": {
+        "type": "isotropic",
+        "albedo": {
+          "type": "solid-color",
+          "color": [1.0, 0.9, 0.9]
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "xy-rect",
+        "x0": 0,
+        "x1": 555,
+        "y0": 0,
+        "y1": 555,
+        "z": 555,
+        "positive": false
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "yz-rect",
+        "y0": 0,
+        "y1": 555,
+        "z0": 0,
+        "z1": 555,
+        "x": 555,
+        "positive": false
+      },
+      "material": "green"
+    },
+    {
+      "shape": {
+        "type": "yz-rect",
+        "y0": 0,
+        "y1": 555,
+        "z0": 0,
+        "z1": 555,
+        "x": 0,
+        "positive": true
+      },
+      "material": "red"
+    },
+    {
+      "important": true,
+      "shape": {
+        "type": "zx-rect",
+        "z0": 100,
+        "z1": 450,
+        "x0": 100,
+        "x1": 450,
+        "y": 554,
+        "positive": false
+      },
+      "material": {
+        "type": "diffuse-light",
+        "emit": {
+          "type": "solid-color",
+          "color": [7, 7, 7]
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "zx-rect",
+        "z0": 0,
+        "z1": 555,
+        "x0": 0,
+        "x1": 555,
+        "y": 0,
+        "positive": true
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "zx-rect",
+        "z0": 0,
+        "z1": 555,
+        "x0": 0,
+        "x1": 555,
+        "y": 555,
+        "positive": false
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [190, 90, 290],
+        "radius": 90
+      },
+      "material": {
+        "type": "dielectric",
+        "ir": 1.5
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [100, 290, 290],
+        "radius": 90
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "image",
+          "file": "data/earthmap.jpg"
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [450, 290, 290],
+        "radius": 90
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "noise",
+          "scale": 0.1,
+          "depth": 7
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "white",
+      "type": "lambertian",
+      "texture": {
+        "type": "solid-color",
+        "color": [0.73, 0.73, 0.73]
+      }
+    },
+    {
+      "name": "red",
+      "type": "lambertian",
+      "texture": {
+        "type": "solid-color",
+        "color": [0.65, 0.05, 0.05]
+      }
+    },
+    {
+      "name": "green",
+      "type": "lambertian",
+      "texture": {
+        "type": "solid-color",
+        "color": [0.12, 0.45, 0.15]
+      }
+    }
+  ]
 }

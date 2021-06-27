@@ -19,6 +19,7 @@ pub mod bvh;
 pub mod camera;
 pub mod hittable;
 pub mod hittables;
+pub mod json;
 pub mod material;
 pub mod pdf;
 pub mod py;

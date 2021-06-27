@@ -24,13 +24,20 @@ impl<O, F: SimdF32Field, R: Rng> ManyHittables<F, R> for TransformHittables<O>
 where
     O: ManyHittables<F, R>,
 {
-    type Item = TransformHittable<O::Item>;
-    type Iter = iter::Map<O::Iter, impl FnMut(O::Item) -> Self::Item>;
+    type HitItem = TransformHittable<O::HitItem>;
+    type SampleItem = TransformHittable<O::SampleItem>;
+    type Iter = iter::Map<
+        O::Iter,
+        impl FnMut((O::HitItem, Option<O::SampleItem>)) -> (Self::HitItem, Option<Self::SampleItem>),
+    >;
 
     fn into_hittables(self) -> Self::Iter {
         let projective = self.projective;
-        self.objects
-            .into_hittables()
-            .map(move |x| TransformHittable::new(projective.clone(), x))
+        self.objects.into_hittables().map(move |(x, y)| {
+            (
+                TransformHittable::new(projective.clone(), x),
+                y.map(|x| TransformHittable::new(projective.clone(), x)),
+            )
+        })
     }
 }

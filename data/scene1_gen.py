@@ -22,7 +22,6 @@ def main() -> None:
     camera['focus_dist'] = 10.0
     camera['time0'] = 0.0
     camera['time1'] = 0.0
-    data.setdefault('')
     objects = data.setdefault('objects', {})
     materials = data.setdefault('materials', {})
     textures = data.setdefault('textures', {})

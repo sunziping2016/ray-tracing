@@ -10,6 +10,7 @@ arrayvec = "0.7.1"
 async-channel = "1.6.1"
 async-std = { version = "1.9.0", features = ["attributes"] }
 auto_impl = "0.4.1"
+clap = "3.0.0-beta.2"
 futures = "0.3.15"
 gdk = { version = "0.13.2", features = ["dox"], optional = true }
 gdk-pixbuf = { version = "0.9.0", optional = true }
@@ -30,15 +31,12 @@ rayon = "1.5.1"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
 simba = { version = "0.5.1", features = ["packed_simd"] }
+tobj = "3.0.1"
+uuid = { version = "0.8", features = ["serde", "v4"] }
 
 [lib]
 name = "v4ray"
 crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "v4ray-gtk"
-path = "src/bin/gtk.rs"
-required-features = ["gtk-frontend"]
 
 [features]
 gtk-frontend = ["gdk", "gdk-pixbuf", "glib", "gtk"]

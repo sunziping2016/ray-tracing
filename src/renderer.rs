@@ -380,8 +380,14 @@ impl<F> RenderResult<F> {
             let index = (y * width + x) as usize;
             let (index1, index2) = (index / F::lanes(), index % F::lanes());
             let base = index * 3;
-            let color = colors[index1]
-                .map(|x| cast(clamp(unsafe { x.extract_unchecked(index2) }, min, max)).unwrap());
+            let color = colors[index1].map(|x| {
+                let v = unsafe { x.extract_unchecked(index2) };
+                if v != v {
+                    0u8
+                } else {
+                    cast(clamp(v, min, max)).unwrap()
+                }
+            });
             (0..3).for_each(|index| bytes[base + index] = color[index]);
         });
         Some((bytes, new_last))

@@ -1,0 +1,252 @@
+{
+  "renderer": {
+    "width": 800,
+    "height": 800,
+    "max_depth": 20
+  },
+  "camera": {
+    "look_from": [
+      278,
+      278,
+      -800
+    ],
+    "look_at": [
+      278,
+      278,
+      0
+    ],
+    "vfov": 40
+  },
+  "objects": [
+    {
+      "shape": {
+        "type": "xy-rect",
+        "x0": 0,
+        "x1": 555,
+        "y0": 0,
+        "y1": 555,
+        "z": 555,
+        "positive": false
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "zx-rect",
+        "x0": 0,
+        "x1": 555,
+        "z0": 0,
+        "z1": 555,
+        "y": 0,
+        "positive": true
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "zx-rect",
+        "x0": 0,
+        "x1": 555,
+        "z0": 0,
+        "z1": 555,
+        "y": 555,
+        "positive": false
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "yz-rect",
+        "y0": 0,
+        "y1": 555,
+        "z0": 0,
+        "z1": 555,
+        "x": 555,
+        "positive": false
+      },
+      "material": "red"
+    },
+    {
+      "shape": {
+        "type": "yz-rect",
+        "y0": 0,
+        "y1": 555,
+        "z0": 0,
+        "z1": 555,
+        "x": 0,
+        "positive": true
+      },
+      "material": "green"
+    },
+    {
+      "important": true,
+      "shape": {
+        "type": "zx-rect",
+        "x0": 187,
+        "x1": 372,
+        "z0": 187,
+        "z1": 372,
+        "y": 554.999,
+        "positive": false
+      },
+      "material": "light"
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [430, 120, 120],
+        "radius": 70
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "noise",
+          "scale": 0.03,
+          "depth": 6
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [277.5, 120, 120],
+        "radius": 70
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "image",
+          "file": "data/earthmap.jpg"
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [120, 120, 120],
+        "radius": 70
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "noise",
+          "scale": 0.01,
+          "depth": 6
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [430, 277.5, 277.5],
+        "radius": 70
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "noise",
+          "scale": 4,
+          "depth": 6
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [277.5, 277.5, 277.5],
+        "radius": 70
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "noise",
+          "scale": 0.1143,
+          "depth": 6
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [120, 277.5, 277.5],
+        "radius": 70
+      },
+      "material": {
+        "type": "lambertian",
+        "texture": {
+          "type": "noise",
+          "scale": 0.04,
+          "depth": 10
+        }
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [430, 430, 430],
+        "radius": 70
+      },
+      "material": {
+        "type": "dielectric",
+        "ir": 1.55
+      }
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [277.5, 430, 430],
+        "radius": 70
+      },
+      "material": "white"
+    },
+    {
+      "shape": {
+        "type": "sphere",
+        "center": [120, 430, 430],
+        "radius": 70
+      },
+      "material": {
+        "type": "metal",
+        "albedo": [0.9, 0.9, 0.9],
+        "fuzz": 0.01
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "white",
+      "type": "lambertian",
+      "texture": {
+        "name": "white",
+        "type": "solid-color",
+        "color": [0.73, 0.73, 0.73]
+      }
+    },
+    {
+      "name": "red",
+      "type": "lambertian",
+      "texture": {
+        "name": "red",
+        "type": "solid-color",
+        "color": [0.65, 0.05, 0.05]
+      }
+    },
+    {
+      "name": "green",
+      "type": "lambertian",
+      "texture": {
+        "name": "green",
+        "type": "solid-color",
+        "color": [0.12, 0.45, 0.15]
+      }
+    },
+    {
+      "name": "light",
+      "type": "diffuse-light",
+      "emit": {
+        "type": "solid-color",
+        "color": [10.86, 7.76, 6.2]
+      }
+    }
+  ]
+}
