@@ -19,9 +19,9 @@ type R = ThreadRng;
 #[clap(version = "0.1.0", author = "Ziping Sun <me@szp.io>")]
 #[clap(setting = AppSettings::ColoredHelp)]
 struct Opts {
-    #[clap(short, long, default_value = "data/scene.json")]
+    #[clap(short, long, default_value = "scene.json")]
     input: String,
-    #[clap(short, long, default_value = "data/output.bmp")]
+    #[clap(short, long, default_value = "output.bmp")]
     output: String,
 }
 

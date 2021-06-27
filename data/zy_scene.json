@@ -116,7 +116,7 @@
         "type": "lambertian",
         "texture": {
           "type": "image",
-          "file": "data/earthmap.jpg"
+          "file": "earthmap.jpg"
         }
       }
     },
